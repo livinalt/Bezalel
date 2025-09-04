@@ -7,7 +7,6 @@ import {
     Undo2,
     Redo2,
     Sparkles,
-    Monitor,
     Grid,
     ZoomIn,
     ZoomOut,
@@ -53,13 +52,13 @@ export default function Toolbar({
     setIsStreaming,
 }: ToolbarProps) {
     return (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
-            <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border border-gray-200 dark:border-zinc-700 shadow-md px-3 py-2">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl ">
+            <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-lg bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border border-gray-200 dark:border-zinc-700 shadow-md py-1.5 px-1">
                 {/* Draw / Pan */}
                 <button
                     title={isDrawingMode ? "Drawing" : "Pan"}
                     onClick={() => setIsDrawingMode((s) => !s)}
-                    className={`p-2 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700 transition ${isDrawingMode ? "bg-gray-100 dark:bg-zinc-700" : ""
+                    className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 transition ${isDrawingMode ? "bg-gray-100 dark:bg-zinc-700" : ""
                         }`}
                 >
                     {isDrawingMode ? (
@@ -74,7 +73,7 @@ export default function Toolbar({
                     type="color"
                     value={brushColor}
                     onChange={(e) => setBrushColor(e.target.value)}
-                    className="w-7 h-7 rounded-md border border-gray-200 dark:border-zinc-700"
+                    className="w-6 h-6 rounded border border-gray-200 dark:border-zinc-700"
                     title="Brush color"
                 />
                 <input
@@ -83,71 +82,63 @@ export default function Toolbar({
                     max={40}
                     value={brushWidth}
                     onChange={(e) => setBrushWidth(Number(e.target.value))}
-                    className="w-24 accent-blue-500"
+                    className="w-20 accent-blue-500"
                     title="Brush size"
                 />
-
-                <div className="hidden sm:block w-px h-6 bg-gray-200 dark:bg-zinc-700 mx-1" />
 
                 {/* Undo / Redo */}
                 <button
                     title="Undo"
                     onClick={handleUndo}
-                    className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700"
                 >
                     <Undo2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
                 </button>
                 <button
                     title="Redo"
                     onClick={handleRedo}
-                    className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700"
                 >
                     <Redo2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
                 </button>
-
-                <div className="hidden sm:block w-px h-6 bg-gray-200 dark:bg-zinc-700 mx-1" />
 
                 {/* Zoom */}
                 <button
                     title="Zoom Out"
                     onClick={() => canvasComponentRef.current?.zoomOut()}
-                    className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700"
                 >
                     <ZoomOut className="w-4 h-4 text-gray-800 dark:text-gray-200" />
                 </button>
                 <button
                     title="Zoom In"
                     onClick={() => canvasComponentRef.current?.zoomIn()}
-                    className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700"
                 >
                     <ZoomIn className="w-4 h-4 text-gray-800 dark:text-gray-200" />
                 </button>
 
-                <div className="hidden sm:block w-px h-6 bg-gray-200 dark:bg-zinc-700 mx-1" />
-
                 {/* AI Prompt */}
                 <input
                     title="AI prompt"
-                    placeholder="Describe enhancement..."
+                    placeholder="AI prompt..."
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
-                    className="text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 bg-gray-50 dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 rounded-md px-2 py-1 w-40 focus:outline-none focus:ring-1 focus:ring-green-400"
+                    className="text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 bg-gray-50 dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 rounded px-1.5 py-0.5 w-32 focus:outline-none focus:ring-1 focus:ring-green-400"
                 />
                 <button
                     title="Enhance with AI"
                     onClick={handleEnhance}
-                    className="p-2 rounded-md hover:bg-green-50"
+                    className="p-1.5 rounded hover:bg-green-50"
                 >
                     <Sparkles className="w-4 h-4 text-green-600" />
                 </button>
-
-                <div className="hidden sm:block w-px h-6 bg-gray-200 dark:bg-zinc-700 mx-1" />
 
                 {/* Toggle Grid */}
                 <button
                     title="Toggle grid"
                     onClick={() => setShowGrid((s) => !s)}
-                    className={`p-2 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700 transition ${showGrid ? "bg-gray-100 dark:bg-zinc-700" : ""
+                    className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 ${showGrid ? "bg-gray-100 dark:bg-zinc-700" : ""
                         }`}
                 >
                     <Grid
@@ -158,23 +149,21 @@ export default function Toolbar({
                     />
                 </button>
 
-                <div className="hidden sm:block w-px h-6 bg-gray-200 dark:bg-zinc-700 mx-1" />
-
                 {/* Go Live Button */}
                 <button
                     onClick={() => setIsStreaming(!isStreaming)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${isStreaming
+                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition ${isStreaming
                             ? "bg-red-600 text-white hover:bg-red-700"
                             : "bg-blue-600 text-white hover:bg-blue-700"
                         }`}
                 >
                     {isStreaming ? (
                         <>
-                            <Square className="w-4 h-4" /> Stop Live
+                            <Square className="w-3.5 h-3.5" /> Stop
                         </>
                     ) : (
                         <>
-                            <Radio className="w-4 h-4 animate-pulse text-red-300" /> Go Live
+                            <Radio className="w-3.5 h-3.5 animate-pulse text-red-300" /> Live
                         </>
                     )}
                 </button>
