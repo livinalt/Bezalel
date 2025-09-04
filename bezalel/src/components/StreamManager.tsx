@@ -1,10 +1,15 @@
-
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Socket } from "socket.io-client";
 import { toast } from "sonner";
 import { Canvas as FabricJSCanvas } from "fabric";
+
+// Extend fabric.Canvas with compatible types
+interface ExtendedFabricCanvas extends FabricJSCanvas {
+    lowerCanvasEl: HTMLCanvasElement;
+    getElement: () => HTMLCanvasElement;
+}
 
 interface StreamManagerProps {
     isStreaming: boolean;
@@ -56,7 +61,7 @@ export default function StreamManager({
                     continue;
                 }
                 return response;
-            } catch (err: any) {
+            } catch (err: unknown) {
                 if (i === maxRetries - 1) throw err;
             }
         }
@@ -224,8 +229,11 @@ export default function StreamManager({
         if (!isStreaming || !canvasRef.current || !canvasVideoRef.current) return;
 
         let isActive = true;
+        const canvasVideo = canvasVideoRef.current;
+        const webcamVideo = webcamVideoRef.current;
+        const canvas = canvasRef.current as ExtendedFabricCanvas;
 
-        const canvasElement = (canvasRef.current as any).lowerCanvasEl ?? (canvasRef.current as any).getElement?.();
+        const canvasElement = canvas.lowerCanvasEl; // or canvas.getElement() if preferred
         if (!canvasElement || typeof canvasElement.captureStream !== "function") {
             toast.error("Streaming not supported: unable to capture canvas stream.");
             return;
@@ -239,13 +247,13 @@ export default function StreamManager({
 
             if (!useWebcam) {
                 streamRef.current = canvasStream;
-                canvasVideoRef.current!.srcObject = canvasStream;
-                if (webcamVideoRef.current) webcamVideoRef.current.srcObject = null;
+                canvasVideo.srcObject = canvasStream;
+                if (webcamVideo) webcamVideo.srcObject = null;
                 const result = await createStream(canvasStream, aiPrompt);
                 if (result && isActive) {
                     await publishToIngest(result.whipUrl, canvasStream);
                     socketRef.current?.emit("playbackInfo", { playbackUrl: result.playbackUrl, roomId });
-                    canvasVideoRef.current!.srcObject = canvasStream;
+                    canvasVideo.srcObject = canvasStream;
                 }
                 return;
             }
@@ -254,32 +262,32 @@ export default function StreamManager({
                 const webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 if (!isActive) return;
                 const combined = new MediaStream();
-                canvasStream.getVideoTracks().forEach((t) => combined.addTrack(t));
-                webcamStream.getVideoTracks().forEach((t) => combined.addTrack(t));
-                webcamStream.getAudioTracks().forEach((t) => {
+                canvasStream.getVideoTracks().forEach((t: MediaStreamTrack) => combined.addTrack(t));
+                webcamStream.getVideoTracks().forEach((t: MediaStreamTrack) => combined.addTrack(t));
+                webcamStream.getAudioTracks().forEach((t: MediaStreamTrack) => {
                     combined.addTrack(t);
                     t.enabled = !isMuted;
                 });
                 streamRef.current = combined;
-                canvasVideoRef.current!.srcObject = canvasStream;
-                if (webcamVideoRef.current) webcamVideoRef.current.srcObject = webcamStream;
+                canvasVideo.srcObject = canvasStream;
+                if (webcamVideo) webcamVideo.srcObject = webcamStream;
                 const result = await createStream(combined, aiPrompt);
                 if (result && isActive) {
                     await publishToIngest(result.whipUrl, combined);
                     socketRef.current?.emit("playbackInfo", { playbackUrl: result.playbackUrl, roomId });
-                    canvasVideoRef.current!.srcObject = canvasStream;
+                    canvasVideo.srcObject = canvasStream;
                 }
             } catch {
                 if (isActive) {
                     toast.error("Could not access webcam — streaming canvas only.");
                     streamRef.current = canvasStream;
-                    canvasVideoRef.current!.srcObject = canvasStream;
-                    if (webcamVideoRef.current) webcamVideoRef.current.srcObject = null;
+                    canvasVideo.srcObject = canvasStream;
+                    if (webcamVideo) webcamVideo.srcObject = null;
                     const result = await createStream(canvasStream, aiPrompt);
                     if (result && isActive) {
                         await publishToIngest(result.whipUrl, canvasStream);
                         socketRef.current?.emit("playbackInfo", { playbackUrl: result.playbackUrl, roomId });
-                        canvasVideoRef.current!.srcObject = canvasStream;
+                        canvasVideo.srcObject = canvasStream;
                     }
                 }
             }
@@ -293,20 +301,19 @@ export default function StreamManager({
                 streamRef.current.getTracks().forEach((track) => track.stop());
                 streamRef.current = null;
             }
-            if (canvasVideoRef.current) {
-                canvasVideoRef.current.srcObject = null;
+            if (canvasVideo) {
+                canvasVideo.srcObject = null;
             }
-            if (webcamVideoRef.current) {
-                webcamVideoRef.current.srcObject = null;
+            if (webcamVideo) {
+                webcamVideo.srcObject = null;
             }
             if (pcRef.current) {
                 pcRef.current.close();
                 pcRef.current = null;
             }
-            // No DELETE request, as it returns 405
             setLocalStreamId(null);
         };
-    }, [isStreaming, useWebcam, roomId, socketRef, canvasRef, createStream, publishToIngest, isMuted]);
+    }, [isStreaming, useWebcam, roomId, socketRef, canvasRef, createStream, publishToIngest, isMuted, aiPrompt]);
 
     return (
         <>

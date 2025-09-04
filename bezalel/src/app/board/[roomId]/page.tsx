@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
 import { useParams } from "next/navigation";
 import io, { Socket } from "socket.io-client";
 import { debounce } from "lodash";
@@ -14,17 +13,31 @@ import StreamManager from "@/components/StreamManager";
 import { v4 as uuid } from "uuid";
 import ThemeToggle from "@/components/ThemeToggle";
 
-type PageData = {
+// Define types in Board.tsx (instead of importing from '@/types')
+export type CanvasData = Record<string, unknown>;
+
+export type PageData = {
     id: string;
     name: string;
-    canvasData: any | null;
+    canvasData: CanvasData | null;
 };
+
+export interface ExtendedFabricCanvas extends FabricJSCanvas {
+    zoomIn: () => void;
+    zoomOut: () => void;
+    resetZoom: () => void;
+    toJSON: () => Record<string, unknown> | undefined;
+    loadFromJSON: (json: string | Record<string, unknown>) => Promise<ExtendedFabricCanvas>;
+    clone(properties: string[]): Promise<ExtendedFabricCanvas>;
+    cloneWithoutData(): ExtendedFabricCanvas;
+}
 
 export default function Board() {
     const { roomId } = useParams();
+
     const canvasRef = useRef<FabricJSCanvas | null>(null);
     const socketRef = useRef<Socket | null>(null);
-    const canvasComponentRef = useRef<any>(null);
+    const canvasComponentRef = useRef<ExtendedFabricCanvas | null>(null);
 
     const [isStreaming, setIsStreaming] = useState(false);
     const [useWebcam, setUseWebcam] = useState(false);
@@ -35,15 +48,15 @@ export default function Board() {
     const [brushWidth, setBrushWidth] = useState(3);
     const [viewUrl, setViewUrl] = useState("");
     const [showGrid, setShowGrid] = useState(true);
-    const [streamId, setStreamId] = useState<string | null>(null);
+    const [streamId, setStreamId] = useState<string | null>(null); // Added streamId state
 
     const undoStack = useRef<FabricObject[]>([]);
     const redoStack = useRef<FabricObject[]>([]);
 
-    const [pages, setPages] = useState<PageData[]>([{ id: uuid(), name: "Page 1", canvasData: null }]);
-    const [activePageId, setActivePageId] = useState(pages[0].id);
+    const initialPage = { id: uuid(), name: "Page 1", canvasData: null };
+    const [pages, setPages] = useState<PageData[]>([initialPage]);
+    const [activePageId, setActivePageId] = useState(initialPage.id);
 
-    // Page management
     const handleAddPage = () => {
         const newPage = { id: uuid(), name: `Page ${pages.length + 1}`, canvasData: null };
         setPages((prev) => [...prev, newPage]);
@@ -72,7 +85,6 @@ export default function Board() {
         });
     };
 
-    // Save canvas state
     const saveCanvasState = debounce((canvas: FabricJSCanvas, pageId: string) => {
         setPages((prevPages) =>
             prevPages.map((p) =>
@@ -97,9 +109,8 @@ export default function Board() {
             canvasRef.current?.off("object:modified", handleCanvasChange);
             canvasRef.current?.off("object:removed", handleCanvasChange);
         };
-    }, [activePageId]);
+    }, [activePageId, saveCanvasState]);
 
-    // Load page canvas
     useEffect(() => {
         if (!canvasRef.current) return;
 
@@ -117,16 +128,14 @@ export default function Board() {
         } else {
             canvasRef.current.renderAll();
         }
-    }, [activePageId]);
+    }, [activePageId, pages]);
 
-    // Set view URL
     useEffect(() => {
         if (typeof window !== "undefined") {
             setViewUrl(`${window.location.origin}/board/${roomId}/view`);
         }
     }, [roomId]);
 
-    // Socket.io setup
     useEffect(() => {
         const socket = io(process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:3001");
         socketRef.current = socket;
@@ -140,6 +149,7 @@ export default function Board() {
         });
         socket.on("connect_error", (err) => {
             console.error("Socket connection error:", err);
+            toast.error("Failed to connect to server");
         });
         return () => {
             console.log("Disconnecting socket");
@@ -147,7 +157,6 @@ export default function Board() {
         };
     }, [roomId]);
 
-    // Path / undo stack
     const handlePathCreated = (path: FabricPath) => {
         if (canvasRef.current && path) {
             undoStack.current.push(path as unknown as FabricObject);
@@ -186,10 +195,13 @@ export default function Board() {
 
     const setStreamingDebounced = debounce((value: boolean) => setIsStreaming(value), 300);
 
-    // Handle AI enhancement from StreamManager
     const handleEnhance = () => {
         // StreamManager handles the logic
     };
+
+    if (!roomId || typeof roomId !== "string") {
+        return <div className="text-red-500">Error: Invalid or missing roomId</div>;
+    }
 
     return (
         <div className="relative w-screen h-screen bg-neutral-100 dark:bg-zinc-900">
@@ -247,7 +259,7 @@ export default function Board() {
                     isStreaming={isStreaming}
                     useWebcam={useWebcam}
                     aiPrompt={aiPrompt}
-                    roomId={roomId as string}
+                    roomId={roomId}
                     socketRef={socketRef}
                     canvasRef={canvasRef}
                     setStreamId={setStreamId}

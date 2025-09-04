@@ -1,6 +1,7 @@
 "use client";
 
 import { Dispatch, RefObject, SetStateAction } from "react";
+import { Canvas as FabricJSCanvas } from "fabric";
 import {
     Pencil,
     Hand,
@@ -14,6 +15,12 @@ import {
     Square,
 } from "lucide-react";
 
+// Define an interface for the canvas ref, extending FabricJSCanvas
+interface ExtendedFabricCanvas extends FabricJSCanvas {
+    zoomIn: () => void;
+    zoomOut: () => void;
+}
+
 interface ToolbarProps {
     isDrawingMode: boolean;
     setIsDrawingMode: Dispatch<SetStateAction<boolean>>;
@@ -23,7 +30,7 @@ interface ToolbarProps {
     setBrushWidth: Dispatch<SetStateAction<number>>;
     handleUndo: () => void;
     handleRedo: () => void;
-    canvasComponentRef: RefObject<any>;
+    canvasComponentRef: RefObject<ExtendedFabricCanvas>;
     aiPrompt: string;
     setAiPrompt: Dispatch<SetStateAction<string>>;
     handleEnhance: () => void;
@@ -52,7 +59,7 @@ export default function Toolbar({
     setIsStreaming,
 }: ToolbarProps) {
     return (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl ">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl">
             <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-lg bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border border-gray-200 dark:border-zinc-700 shadow-md py-1.5 px-1">
                 {/* Draw / Pan */}
                 <button
@@ -142,9 +149,7 @@ export default function Toolbar({
                         }`}
                 >
                     <Grid
-                        className={`w-4 h-4 ${showGrid
-                                ? "text-gray-800 dark:text-gray-200"
-                                : "text-gray-500 dark:text-zinc-400"
+                        className={`w-4 h-4 ${showGrid ? "text-gray-800 dark:text-gray-200" : "text-gray-500 dark:text-zinc-400"
                             }`}
                     />
                 </button>

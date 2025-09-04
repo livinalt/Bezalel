@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
-import { Canvas as FabricJSCanvas, PencilBrush, Pattern, Path } from "fabric";
+import { Canvas as FabricJSCanvas, PencilBrush, Pattern, Path, Point } from "fabric";
 import { useTheme } from "next-themes";
 
 interface CanvasProps {
@@ -13,6 +13,10 @@ interface CanvasProps {
     brushColor?: string;
     brushWidth?: number;
     showGrid?: boolean;
+}
+
+interface PathCreatedEvent {
+    path: Path;
 }
 
 const Canvas = forwardRef(function Canvas(
@@ -35,8 +39,10 @@ const Canvas = forwardRef(function Canvas(
 
     const setZoom = (zoom: number, point?: { x: number; y: number }) => {
         if (!fabricRef.current) return;
-        if (!point) point = { x: fabricRef.current.getWidth()! / 2, y: fabricRef.current.getHeight()! / 2 };
-        fabricRef.current.zoomToPoint(point, zoom);
+        const zoomPoint = point
+            ? new Point(point.x, point.y)
+            : new Point(fabricRef.current.getWidth() / 2, fabricRef.current.getHeight() / 2);
+        fabricRef.current.zoomToPoint(zoomPoint, zoom);
     };
 
     useImperativeHandle(ref, () => ({
@@ -44,7 +50,7 @@ const Canvas = forwardRef(function Canvas(
         zoomOut: () => fabricRef.current && setZoom(fabricRef.current.getZoom() / 1.1),
         resetZoom: () => fabricRef.current && setZoom(1),
         toJSON: () => fabricRef.current?.toJSON(),
-        loadFromJSON: (json: any) => {
+        loadFromJSON: (json: string | Record<string, unknown>) => {
             if (!fabricRef.current) return;
             fabricRef.current.loadFromJSON(json || {}, () => fabricRef.current!.renderAll());
         },
@@ -53,7 +59,8 @@ const Canvas = forwardRef(function Canvas(
     useEffect(() => {
         if (!canvasElRef.current) return;
 
-        const fcanvas = new FabricJSCanvas(canvasElRef.current, {
+        const canvasElement = canvasElRef.current;
+        const fcanvas = new FabricJSCanvas(canvasElement, {
             isDrawingMode,
             width,
             height,
@@ -68,13 +75,12 @@ const Canvas = forwardRef(function Canvas(
         fcanvas.freeDrawingBrush.color = brushColor;
 
         if (onPathCreated) {
-            fcanvas.on("path:created", (opts: any) => {
-                const path = opts.path as Path | undefined;
-                if (path) onPathCreated(path);
+            fcanvas.on("path:created", (opts: PathCreatedEvent) => {
+                onPathCreated(opts.path);
             });
         }
 
-        // grid
+        // Grid
         const makeGridPattern = () => {
             const gridSize = 40;
             const gridCanvas = document.createElement("canvas");
@@ -109,16 +115,16 @@ const Canvas = forwardRef(function Canvas(
             setZoom(zoom, { x: opt.offsetX, y: opt.offsetY });
         };
 
-        canvasElRef.current?.addEventListener("wheel", wheelHandler, { passive: false });
+        canvasElement.addEventListener("wheel", wheelHandler, { passive: false });
 
         return () => {
             fcanvas.dispose();
             if (setCanvasRef) setCanvasRef(null);
-            canvasElRef.current?.removeEventListener("wheel", wheelHandler);
+            canvasElement.removeEventListener("wheel", wheelHandler);
         };
     }, []);
 
-    // dynamic updates
+    // Dynamic updates
     useEffect(() => {
         if (fabricRef.current) fabricRef.current.isDrawingMode = isDrawingMode;
     }, [isDrawingMode]);

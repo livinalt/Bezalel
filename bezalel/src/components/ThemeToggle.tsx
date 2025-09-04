@@ -9,32 +9,27 @@ export default function ThemeToggle() {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => setMounted(true), []);
-    if (!mounted) return null; // avoid hydration mismatch
-
-    const toggleTheme = () => {
-        setTheme(theme === "dark" ? "light" : "dark");
-    };
+    if (!mounted) return null; // avoids hydration issues
 
     return (
         <button
-            onClick={toggleTheme}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             aria-label="Toggle theme"
-            aria-pressed={theme === "dark"}
-            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            className="relative flex items-center justify-center p-2 rounded-full 
-                 bg-gray-100 hover:bg-gray-200 
-                 dark:bg-zinc-800 dark:hover:bg-zinc-700
-                 transition-all shadow-sm hover:shadow-md"
+            className="relative flex items-center justify-center w-9 h-9 rounded-full 
+                 bg-white/70 hover:bg-white dark:bg-zinc-800/70 dark:hover:bg-zinc-700
+                 border border-zinc-200/50 dark:border-zinc-700/50
+                 transition-all"
         >
-            {/* Icon wrapper with animation */}
-            <span className="absolute transition-transform duration-300 ease-in-out transform 
-                       rotate-0 opacity-100 dark:-rotate-90 dark:opacity-0">
-                <Sun className="w-5 h-5 text-yellow-500" />
-            </span>
-            <span className="absolute transition-transform duration-300 ease-in-out transform 
-                       rotate-90 opacity-0 dark:rotate-0 dark:opacity-100">
-                <Moon className="w-5 h-5 text-gray-200" />
-            </span>
+            {/* Sun Icon (visible in light mode) */}
+            <Sun
+                className={`absolute h-5 w-5 text-yellow-500 transition-transform duration-300 ${theme === "dark" ? "scale-0 opacity-0 rotate-90" : "scale-100 opacity-100 rotate-0"
+                    }`}
+            />
+            {/* Moon Icon (visible in dark mode) */}
+            <Moon
+                className={`absolute h-5 w-5 text-indigo-400 transition-transform duration-300 ${theme === "dark" ? "scale-100 opacity-100 rotate-0" : "scale-0 opacity-0 -rotate-90"
+                    }`}
+            />
         </button>
     );
 }

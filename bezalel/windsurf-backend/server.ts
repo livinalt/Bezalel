@@ -1,13 +1,13 @@
 import express from "express";
-import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import cors from "cors";
 
 const app = express();
-const server = createServer(app);
-const io = new Server(server, {
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:3000", // your Next.js app
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
   },
 });
@@ -15,64 +15,57 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-// --- Health check ---
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK" });
+app.get("/health", (_req, res) => {
+  res.json({ status: "OK" });
 });
 
-// --- Store playback info + viewers per room ---
-const rooms: Record<string, { playbackUrl?: string; viewers: Set<string> }> =
-  {};
+// Mock Daydream API for testing
+app.post("/mock/daydream/streams", (req, res) => {
+  console.log("Mock API called with body:", req.body);
+  res.json({
+    id: "mock123",
+    whip_url: "https://mock-ingest.daydream.live",
+    output_playback_id: "mock-playback-id",
+  });
+});
 
-// --- Socket.io handling ---
+const sessions: { [key: string]: number } = {};
+
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  console.log(`Socket ${socket.id} connected`);
 
-  // When a viewer or board joins a room
-  socket.on("joinRoom", (roomId: string) => {
-    console.log(`Socket ${socket.id} joined room ${roomId}`);
-
-    if (!rooms[roomId]) {
-      rooms[roomId] = { viewers: new Set() };
-    }
-
-    socket.join(roomId);
-    rooms[roomId].viewers.add(socket.id);
-
-    // Send current playbackUrl if it exists
-    if (rooms[roomId].playbackUrl) {
-      socket.emit("playbackInfo", {
-        playbackUrl: rooms[roomId].playbackUrl,
-      });
-    }
-
-    // Update viewer count
-    io.to(roomId).emit("viewerCount", rooms[roomId].viewers.size);
+  socket.on("joinSession", (sessionId: string) => {
+    socket.join(sessionId);
+    sessions[sessionId] = (sessions[sessionId] || 0) + 1;
+    console.log(`Socket ${socket.id} joined session ${sessionId}`);
+    io.to(sessionId).emit("viewerCount", sessions[sessionId]);
   });
 
-  // When the board host sets/updates playback
-  socket.on("setPlaybackUrl", ({ roomId, playbackUrl }) => {
-    console.log(`Room ${roomId} playback set: ${playbackUrl}`);
-    if (!rooms[roomId]) {
-      rooms[roomId] = { viewers: new Set() };
+  socket.on(
+    "playbackInfo",
+    ({ playbackUrl, roomId }: { playbackUrl: string; roomId: string }) => {
+      console.log(
+        `Broadcasting playbackInfo for room ${roomId}: ${playbackUrl}`
+      );
+      io.to(roomId).emit("playbackInfo", { playbackUrl });
     }
+  );
 
-    rooms[roomId].playbackUrl = playbackUrl;
-    io.to(roomId).emit("playbackInfo", { playbackUrl });
-  });
-
-  // Handle disconnects
   socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-
-    for (const roomId in rooms) {
-      rooms[roomId].viewers.delete(socket.id);
-      io.to(roomId).emit("viewerCount", rooms[roomId].viewers.size);
+    console.log(`Socket ${socket.id} disconnected`);
+    for (const sessionId in sessions) {
+      if (io.sockets.adapter.rooms.get(sessionId)?.has(socket.id)) {
+        sessions[sessionId] = Math.max((sessions[sessionId] || 0) - 1, 0);
+        io.to(sessionId).emit("viewerCount", sessions[sessionId]);
+        if (sessions[sessionId] === 0) {
+          delete sessions[sessionId];
+        }
+      }
     }
   });
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });

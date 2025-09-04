@@ -27,9 +27,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white dark:bg-zinc-900`}
       >
+        {/* ✅ ThemeProvider must be inside body */}
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
-          {/* 🔔 Toast notifications */}
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>
