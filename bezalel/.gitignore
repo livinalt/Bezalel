@@ -1,6 +1,7 @@
 # Node.js
 node_modules/
 .env
+.next
 
 # Python
 __pycache__/
