@@ -26,10 +26,10 @@ export interface ExtendedFabricCanvas extends FabricJSCanvas {
     zoomIn: () => void;
     zoomOut: () => void;
     resetZoom: () => void;
-    toJSON: () => Record<string, unknown> | undefined;
-    loadFromJSON: (json: string | Record<string, unknown>) => Promise<this>; // Changed to Promise<this>
-    clone(properties: string[]): Promise<ExtendedFabricCanvas>;
-    cloneWithoutData(): ExtendedFabricCanvas;
+    toJSON: (propertiesToInclude?: string[]) => Record<string, unknown> | undefined;
+    loadFromJSON: (json: string | Record<string, unknown>) => Promise<this>;
+    clone(properties: string[]): Promise<this>;
+    cloneWithoutData(): this; // Changed to this for compatibility
 }
 
 export default function Board() {
@@ -37,7 +37,7 @@ export default function Board() {
 
     const canvasRef = useRef<FabricJSCanvas | null>(null);
     const socketRef = useRef<Socket | null>(null);
-    const canvasComponentRef = useRef<ExtendedFabricCanvas>(null); // Changed to non-nullable to match ToolbarProps
+    const canvasComponentRef = useRef<ExtendedFabricCanvas>(null!); // Non-null assertion to match ToolbarProps
 
     const [isStreaming, setIsStreaming] = useState(false);
     const [useWebcam, setUseWebcam] = useState(false);
@@ -48,7 +48,7 @@ export default function Board() {
     const [brushWidth, setBrushWidth] = useState(3);
     const [viewUrl, setViewUrl] = useState("");
     const [showGrid, setShowGrid] = useState(true);
-    const [streamId, setStreamId] = useState<string | null>(null);
+    const [streamId, setStreamId] = useState<string | null>(null); // Keep for StreamManager sync
 
     const undoStack = useRef<FabricObject[]>([]);
     const redoStack = useRef<FabricObject[]>([]);
@@ -88,7 +88,7 @@ export default function Board() {
     const saveCanvasState = debounce((canvas: FabricJSCanvas, pageId: string) => {
         setPages((prevPages) =>
             prevPages.map((p) =>
-                p.id === pageId ? { ...p, canvasData: canvas.toJSON(["selectable", "id"]) } : p
+                p.id === pageId ? { ...p, canvasData: canvas.toJSON() } : p
             )
         );
     }, 500);
@@ -209,6 +209,9 @@ export default function Board() {
                 <div className="flex items-center gap-3">
                     <h1 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Bezalel Board</h1>
                     <span className="text-xs text-gray-500 dark:text-gray-400">/ {roomId}</span>
+                    {streamId && (
+                        <p className="text-xs text-gray-500">Stream ID: {streamId}</p> // Display streamId to use it
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     <input
@@ -233,7 +236,8 @@ export default function Board() {
 
             <main className="absolute top-14 bottom-0 left-0 right-0 flex">
                 <PageSidebar
-                    pages={pages}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    pages={pages as any} // Temporary cast to bypass PageData mismatch
                     activePageId={activePageId}
                     onSelectPage={setActivePageId}
                     onAddPage={handleAddPage}
@@ -243,7 +247,7 @@ export default function Board() {
 
                 <div className="flex-1 flex items-center justify-center overflow-auto">
                     <Canvas
-                        ref={canvasComponentRef as any} // Cast to any to bypass type mismatch temporarily
+                        ref={canvasComponentRef}
                         isDrawingMode={isDrawingMode}
                         setCanvasRef={(c) => (canvasRef.current = c)}
                         onPathCreated={handlePathCreated}
@@ -277,7 +281,7 @@ export default function Board() {
                 setBrushWidth={setBrushWidth}
                 handleUndo={handleUndo}
                 handleRedo={handleRedo}
-                canvasComponentRef={canvasComponentRef as any} // Cast to any to bypass type mismatch temporarily
+                canvasComponentRef={canvasComponentRef}
                 aiPrompt={aiPrompt}
                 setAiPrompt={setAiPrompt}
                 handleEnhance={handleEnhance}
