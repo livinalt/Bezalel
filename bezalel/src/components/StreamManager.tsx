@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Socket } from "socket.io-client";
 import { toast } from "sonner";
-import { Canvas as FabricJSCanvas } from "fabric";
+import { Canvas as FabricJSCanvas, Path } from "fabric";
 
-// Extend fabric.Canvas with compatible types
 interface ExtendedFabricCanvas extends FabricJSCanvas {
     lowerCanvasEl: HTMLCanvasElement;
-    getElement: () => HTMLCanvasElement;
 }
 
 interface StreamManagerProps {
@@ -18,9 +16,9 @@ interface StreamManagerProps {
     roomId: string;
     socketRef: React.MutableRefObject<Socket | null>;
     canvasRef: React.MutableRefObject<FabricJSCanvas | null>;
-    setStreamId: React.Dispatch<React.SetStateAction<string | null>>;
-    onEnhance: () => void;
-    setUseWebcam: React.Dispatch<React.SetStateAction<boolean>>;
+    setStreamId: (id: string | null) => void;
+    setUseWebcam: (value: boolean) => void;
+    setStreamState: (state: { stream: MediaStream | null; isMuted: boolean }) => void;
 }
 
 export default function StreamManager({
@@ -31,26 +29,22 @@ export default function StreamManager({
     socketRef,
     canvasRef,
     setStreamId,
-    onEnhance,
     setUseWebcam,
+    setStreamState,
 }: StreamManagerProps) {
-    const canvasVideoRef = useRef<HTMLVideoElement | null>(null);
-    const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const pcRef = useRef<RTCPeerConnection | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [localStreamId, setLocalStreamId] = useState<string | null>(null);
+    const [enhanceStreamId, setEnhanceStreamId] = useState<string | null>(null);
 
-    // Daydream API Configuration
     const DAYDREAM_API_URL = "https://api.daydream.live/v1/streams";
-    const DAYDREAM_API_TOKEN = process.env.NEXT_PUBLIC_DAYDREAM_API_TOKEN || "<your-api-token>";
+    const DAYDREAM_API_TOKEN = process.env.NEXT_PUBLIC_DAYDREAM_API_TOKEN || "";
 
-    // Sync localStreamId with parent
     useEffect(() => {
         setStreamId(localStreamId);
     }, [localStreamId, setStreamId]);
 
-    // Retry with exponential backoff
     const retryWithBackoff = async (fn: () => Promise<Response>, maxRetries: number = 3, delay: number = 1000) => {
         for (let i = 0; i < maxRetries; i++) {
             try {
@@ -68,73 +62,9 @@ export default function StreamManager({
         throw new Error("Retry attempts exhausted");
     };
 
-    // Handle AI enhancement
-    const handleEnhance = async () => {
-        if (!localStreamId) {
-            toast.info("Please start streaming first.");
-            return;
-        }
-        if (!aiPrompt) {
-            toast.info("Please enter an AI prompt.");
-            return;
-        }
-
-        try {
-            // Check stream status
-            const statusResponse = await fetch(`${DAYDREAM_API_URL}/${localStreamId}`, {
-                headers: { Authorization: `Bearer ${DAYDREAM_API_TOKEN}` },
-            });
-            const statusData = await statusResponse.json().catch(() => ({}));
-            if (!statusResponse.ok || !statusData.isActive) {
-                throw new Error(statusData.error || statusData.message || "Stream is not active");
-            }
-
-            // Ensure proper prompt format
-            const enhancedPrompt = aiPrompt.includes("::") ? aiPrompt : `${aiPrompt} :: neutral backdrop`;
-
-            const response = await retryWithBackoff(() =>
-                fetch(`${DAYDREAM_API_URL}/${localStreamId}`, {
-                    method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${DAYDREAM_API_TOKEN}`,
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        pipeline_params: { prompt: enhancedPrompt },
-                    }),
-                })
-            );
-
-            const data = await response.json().catch(() => ({}));
-            if (response.ok) {
-                toast.success("AI visual enhancement applied!");
-                onEnhance();
-            } else {
-                throw new Error(data.error || data.message || `Enhancement failed with status ${response.status}`);
-            }
-        } catch (err) {
-            toast.error(`Failed to apply AI enhancement: ${err instanceof Error ? err.message : "Unknown error"}`);
-        }
-    };
-
-    // Toggle mute/unmute for webcam audio
-    const toggleMute = () => {
-        if (streamRef.current) {
-            const audioTracks = streamRef.current.getAudioTracks();
-            audioTracks.forEach((track) => {
-                track.enabled = !isMuted;
-            });
-            setIsMuted(!isMuted);
-            toast.success(isMuted ? "Audio unmuted" : "Audio muted");
-        }
-    };
-
-    // Create stream (memoized to prevent unnecessary calls)
     const createStream = useCallback(
-        async (stream: MediaStream, prompt: string) => {
+        async (stream: MediaStream | null, prompt: string, forEnhanceOnly: boolean = false) => {
             try {
-                console.log("Environment DAYDREAM_API_TOKEN:", process.env.NEXT_PUBLIC_DAYDREAM_API_TOKEN);
-                console.log("Daydream API Token:", DAYDREAM_API_TOKEN);
                 const response = await retryWithBackoff(() =>
                     fetch(DAYDREAM_API_URL, {
                         method: "POST",
@@ -152,27 +82,29 @@ export default function StreamManager({
                     })
                 );
 
-                console.log("Daydream API Response:", response.status, response.statusText);
                 const data = await response.json().catch(() => ({}));
-                console.log("Daydream create response:", JSON.stringify(data, null, 2));
                 if (response.ok) {
-                    setLocalStreamId(data.id);
-                    return { whipUrl: data.whip_url, playbackUrl: `https://cdn.livepeer.com/hls/${data.output_playback_id}/index.m3u8` };
-                } else {
-                    throw new Error(
-                        data.error || data.message || `Stream creation failed with status ${response.status}: ${response.statusText}`
-                    );
+                    const result = {
+                        id: data.id,
+                        whipUrl: data.whip_url,
+                        playbackUrl: `https://cdn.livepeer.com/hls/${data.output_playback_id}/index.m3u8`,
+                    };
+                    if (!forEnhanceOnly && stream) {
+                        await publishToIngest(result.whipUrl, stream);
+                        socketRef.current?.emit("playbackInfo", { playbackUrl: result.playbackUrl, roomId });
+                    }
+                    return result;
                 }
+                throw new Error(data.error || data.message || `Stream creation failed with status ${response.status}`);
             } catch (err) {
                 console.error("Daydream API Error:", err);
-                toast.error(`Failed to create Daydream stream: ${err instanceof Error ? err.message : "Unknown error"}`);
+                toast.error(`Failed to create stream: ${err instanceof Error ? err.message : "Unknown error"}`);
                 return null;
             }
         },
-        [DAYDREAM_API_TOKEN, roomId]
+        [DAYDREAM_API_TOKEN, roomId, socketRef]
     );
 
-    // Publish to WHIP
     const publishToIngest = useCallback(
         async (whipUrl: string, stream: MediaStream) => {
             if (!whipUrl || !stream) {
@@ -189,16 +121,12 @@ export default function StreamManager({
                 stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
                 pc.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        console.log("ICE candidate:", event.candidate);
-                    }
+                    if (event.candidate) console.log("ICE candidate:", event.candidate);
                 };
 
                 pc.oniceconnectionstatechange = () => {
                     console.log("ICE connection state:", pc.iceConnectionState);
-                    if (pc.iceConnectionState === "failed") {
-                        toast.error("Stream publishing failed");
-                    }
+                    if (pc.iceConnectionState === "failed") toast.error("Stream publishing failed");
                 };
 
                 const offer = await pc.createOffer();
@@ -225,137 +153,197 @@ export default function StreamManager({
         []
     );
 
-    useEffect(() => {
-        if (!isStreaming || !canvasRef.current || !canvasVideoRef.current) return;
+    const applyEnhancementToCanvas = useCallback(
+        async (playbackUrl: string) => {
+            if (!canvasRef.current) return;
+            const canvas = canvasRef.current as ExtendedFabricCanvas;
 
-        let isActive = true;
-        const canvasVideo = canvasVideoRef.current;
-        const webcamVideo = webcamVideoRef.current;
-        const canvas = canvasRef.current as ExtendedFabricCanvas;
+            try {
+                const response = await fetch(playbackUrl);
+                if (!response.ok) throw new Error("Failed to fetch enhanced stream");
+                canvas.getObjects("path").forEach((obj: Path) => {
+                    if (aiPrompt.includes("cartoon")) {
+                        obj.set({ strokeWidth: obj.strokeWidth ? obj.strokeWidth * 1.5 : 5, opacity: 0.8 });
+                    } else if (aiPrompt.includes("sketch")) {
+                        obj.set({ stroke: "#555", opacity: 0.6 });
+                    } else {
+                        obj.set({ opacity: 0.9 });
+                    }
+                });
+                canvas.renderAll();
+                toast.success(`AI enhancement applied to canvas: ${aiPrompt}`);
+            } catch (err) {
+                toast.error(`Failed to apply enhancement: ${err instanceof Error ? err.message : "Unknown error"}`);
+            }
+        },
+        [aiPrompt]
+    );
 
-        const canvasElement = canvas.lowerCanvasEl; // or canvas.getElement() if preferred
-        if (!canvasElement || typeof canvasElement.captureStream !== "function") {
-            toast.error("Streaming not supported: unable to capture canvas stream.");
+    const handleEnhance = async () => {
+        if (!aiPrompt) {
+            toast.info("Please enter an AI prompt.");
+            return;
+        }
+        if (!canvasRef.current) {
+            toast.error("Canvas is not initialized. Please try again.");
+            return;
+        }
+        if (!canvasRef.current.lowerCanvasEl) {
+            toast.error("Canvas rendering context is not available.");
             return;
         }
 
-        const canvasStream = canvasElement.captureStream(30);
-        streamRef.current = canvasStream;
+        const canvas = canvasRef.current as ExtendedFabricCanvas;
+        const canvasStream = canvas.lowerCanvasEl.captureStream(30);
 
-        const combineStreams = async () => {
-            if (!isActive) return;
+        try {
+            const enhancedPrompt = aiPrompt.includes("::") ? aiPrompt : `${aiPrompt} :: neutral backdrop`;
+            const streamIdToUse = isStreaming && localStreamId ? localStreamId : enhanceStreamId;
 
-            if (!useWebcam) {
-                streamRef.current = canvasStream;
-                canvasVideo.srcObject = canvasStream;
-                if (webcamVideo) webcamVideo.srcObject = null;
-                const result = await createStream(canvasStream, aiPrompt);
-                if (result && isActive) {
-                    await publishToIngest(result.whipUrl, canvasStream);
-                    socketRef.current?.emit("playbackInfo", { playbackUrl: result.playbackUrl, roomId });
-                    canvasVideo.srcObject = canvasStream;
+            if (streamIdToUse) {
+                const response = await retryWithBackoff(() =>
+                    fetch(`${DAYDREAM_API_URL}/${streamIdToUse}`, {
+                        method: "PATCH",
+                        headers: {
+                            Authorization: `Bearer ${DAYDREAM_API_TOKEN}`,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            pipeline_params: { prompt: enhancedPrompt },
+                        }),
+                    })
+                );
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.error || data.message || `Enhancement failed with status ${response.status}`);
                 }
-                return;
-            }
 
-            try {
-                const webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                if (!isActive) return;
-                const combined = new MediaStream();
-                canvasStream.getVideoTracks().forEach((t: MediaStreamTrack) => combined.addTrack(t));
-                webcamStream.getVideoTracks().forEach((t: MediaStreamTrack) => combined.addTrack(t));
-                webcamStream.getAudioTracks().forEach((t: MediaStreamTrack) => {
-                    combined.addTrack(t);
-                    t.enabled = !isMuted;
-                });
-                streamRef.current = combined;
-                canvasVideo.srcObject = canvasStream;
-                if (webcamVideo) webcamVideo.srcObject = webcamStream;
-                const result = await createStream(combined, aiPrompt);
-                if (result && isActive) {
-                    await publishToIngest(result.whipUrl, combined);
-                    socketRef.current?.emit("playbackInfo", { playbackUrl: result.playbackUrl, roomId });
-                    canvasVideo.srcObject = canvasStream;
-                }
-            } catch {
-                if (isActive) {
-                    toast.error("Could not access webcam — streaming canvas only.");
-                    streamRef.current = canvasStream;
-                    canvasVideo.srcObject = canvasStream;
-                    if (webcamVideo) webcamVideo.srcObject = null;
-                    const result = await createStream(canvasStream, aiPrompt);
-                    if (result && isActive) {
-                        await publishToIngest(result.whipUrl, canvasStream);
-                        socketRef.current?.emit("playbackInfo", { playbackUrl: result.playbackUrl, roomId });
-                        canvasVideo.srcObject = canvasStream;
-                    }
+                const playbackUrl = `https://cdn.livepeer.com/hls/${data.output_playback_id}/index.m3u8`;
+                await applyEnhancementToCanvas(playbackUrl);
+            } else {
+                const result = await createStream(canvasStream, enhancedPrompt, true);
+                if (result) {
+                    setEnhanceStreamId(result.id);
+                    await applyEnhancementToCanvas(result.playbackUrl);
                 }
             }
-        };
+        } catch (err) {
+            toast.error(`Failed to apply AI enhancement: ${err instanceof Error ? err.message : "Unknown error"}`);
+        } finally {
+            canvasStream.getTracks().forEach((track) => track.stop());
+        }
+    };
 
-        combineStreams();
+    useEffect(() => {
+        const socket = socketRef.current;
+        if (!socket) return;
+
+        socket.on("enhance", ({ aiPrompt: prompt, roomId: id }) => {
+            if (id === roomId) {
+                setAiPrompt(prompt);
+                handleEnhance();
+            }
+        });
 
         return () => {
-            isActive = false;
+            socket.off("enhance");
+        };
+    }, [roomId, socketRef, handleEnhance]);
+
+    useEffect(() => {
+        if (!isStreaming || !canvasRef.current) {
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach((track) => track.stop());
                 streamRef.current = null;
-            }
-            if (canvasVideo) {
-                canvasVideo.srcObject = null;
-            }
-            if (webcamVideo) {
-                webcamVideo.srcObject = null;
             }
             if (pcRef.current) {
                 pcRef.current.close();
                 pcRef.current = null;
             }
             setLocalStreamId(null);
-        };
-    }, [isStreaming, useWebcam, roomId, socketRef, canvasRef, createStream, publishToIngest, isMuted, aiPrompt]);
+            setStreamState({ stream: null, isMuted });
+            socketRef.current?.emit("stopStream", { roomId });
+            return;
+        }
 
-    return (
-        <>
-            {isStreaming && (
-                <aside className="w-64 p-3 border-l border-gray-100 bg-white/60 dark:bg-zinc-800/60">
-                    <div className="space-y-2">
-                        <div>
-                            <label className="text-xs text-gray-700 dark:text-gray-300">Canvas Stream</label>
-                            <video ref={canvasVideoRef} autoPlay muted className="w-full h-40 rounded-md object-cover" />
-                        </div>
-                        {useWebcam && (
-                            <div>
-                                <label className="text-xs text-gray-700 dark:text-gray-300">Webcam Preview</label>
-                                <video ref={webcamVideoRef} autoPlay className="w-full h-40 rounded-md object-cover" />
-                            </div>
-                        )}
-                        <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={useWebcam}
-                                onChange={(e) => setUseWebcam(e.target.checked)}
-                                className="w-4 h-4 accent-blue-500"
-                            />
-                            <span>Use Webcam</span>
-                        </label>
-                        {useWebcam && (
-                            <button
-                                onClick={toggleMute}
-                                className="flex items-center gap-2 px-2 py-1 rounded-md bg-blue-600 text-white text-xs hover:bg-blue-700 transition"
-                            >
-                                {isMuted ? "Unmute Audio" : "Mute Audio"}
-                            </button>
-                        )}
-                        <button
-                            onClick={handleEnhance}
-                            className="flex items-center gap-2 px-2 py-1 rounded-md bg-blue-600 text-white text-xs hover:bg-blue-700 transition"
-                        >
-                            Enhance with AI
-                        </button>
-                    </div>
-                </aside>
-            )}
-        </>
-    );
+        const canvas = canvasRef.current as ExtendedFabricCanvas;
+        if (!canvas.lowerCanvasEl || typeof canvas.lowerCanvasEl.captureStream !== "function") {
+            toast.error("Streaming not supported: unable to capture canvas stream.");
+            return;
+        }
+
+        const canvasStream = canvas.lowerCanvasEl.captureStream(30);
+        streamRef.current = canvasStream;
+
+        const combineStreams = async () => {
+            let combined = canvasStream;
+            let webcamStream: MediaStream | null = null;
+
+            if (useWebcam) {
+                try {
+                    webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    combined = new MediaStream([
+                        ...canvasStream.getVideoTracks(),
+                        ...webcamStream.getVideoTracks(),
+                        ...webcamStream.getAudioTracks().map((t) => {
+                            t.enabled = !isMuted;
+                            return t;
+                        }),
+                    ]);
+                    setStreamState({ stream: webcamStream, isMuted });
+                } catch (err) {
+                    toast.error("Webcam access failed; streaming canvas only.");
+                    setStreamState({ stream: null, isMuted });
+                }
+            } else {
+                setStreamState({ stream: null, isMuted });
+            }
+
+            streamRef.current = combined;
+            const result = await createStream(combined, aiPrompt);
+            if (result) {
+                setLocalStreamId(result.id);
+            }
+        };
+
+        combineStreams();
+
+        return () => {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop());
+                streamRef.current = null;
+            }
+            if (pcRef.current) {
+                pcRef.current.close();
+                pcRef.current = null;
+            }
+            setLocalStreamId(null);
+            setStreamState({ stream: null, isMuted });
+            socketRef.current?.emit("stopStream", { roomId });
+        };
+    }, [isStreaming, useWebcam, aiPrompt, roomId, canvasRef, createStream, socketRef, isMuted, setStreamState]);
+
+    useEffect(() => {
+        if (streamRef.current) {
+            streamRef.current.getAudioTracks().forEach((track) => {
+                track.enabled = !isMuted;
+            });
+            setStreamState({ stream: streamRef.current.getVideoTracks().length > 1 ? streamRef.current : null, isMuted });
+        }
+    }, [isMuted, setStreamState]);
+
+    useEffect(() => {
+        return () => {
+            if (enhanceStreamId && !isStreaming) {
+                fetch(`${DAYDREAM_API_URL}/${enhanceStreamId}`, {
+                    method: "DELETE",
+                    headers: { Authorization: `Bearer ${DAYDREAM_API_TOKEN}` },
+                }).catch((err) => console.error("Failed to delete enhancement stream:", err));
+                setEnhanceStreamId(null);
+            }
+        };
+    }, [enhanceStreamId, isStreaming]);
+
+    return null; // No UI rendered
 }

@@ -1,163 +1,155 @@
+
 "use client";
 
-import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
-import { Canvas as FabricJSCanvas, PencilBrush, Pattern, Path, Point } from "fabric";
-import { useTheme } from "next-themes";
+import { useState, useRef, useEffect } from "react";
+import { Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { toast } from "sonner";
 
-interface CanvasProps {
-    isDrawingMode: boolean;
-    setCanvasRef?: (canvas: FabricJSCanvas | null) => void;
-    onPathCreated?: (path: Path) => void;
-    width?: number;
-    height?: number;
-    brushColor?: string;
-    brushWidth?: number;
-    showGrid?: boolean;
+interface VideoFeedProps {
+    stream: MediaStream | null;
+    useWebcam: boolean;
+    setUseWebcam: (value: boolean) => void;
+    isMuted: boolean;
+    setIsMuted: (value: boolean) => void;
 }
 
-interface PathCreatedEvent {
-    path: Path;
-}
+export default function VideoFeed({ stream, useWebcam, setUseWebcam, isMuted, setIsMuted }: VideoFeedProps) {
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [collapsed, setCollapsed] = useState(false);
+    // Initialize position with safe defaults for SSR
+    const [position, setPosition] = useState({ x: 20, y: 200 });
+    const [error, setError] = useState<string | null>(null);
+    const dragStartPos = useRef({ x: 0, y: 0 });
 
-const Canvas = forwardRef(function Canvas(
-    {
-        isDrawingMode,
-        setCanvasRef,
-        onPathCreated,
-        width = 5000,
-        height = 3500,
-        brushColor = "#000000",
-        brushWidth = 3,
-        showGrid = true,
-    }: CanvasProps,
-    ref
-) {
-    const canvasElRef = useRef<HTMLCanvasElement | null>(null);
-    const fabricRef = useRef<FabricJSCanvas | null>(null);
-    const patternCacheRef = useRef<HTMLCanvasElement | null>(null);
-    const { theme } = useTheme();
-
-    const setZoom = (zoom: number, point?: { x: number; y: number }) => {
-        if (!fabricRef.current) return;
-        const zoomPoint = point
-            ? new Point(point.x, point.y)
-            : new Point(fabricRef.current.getWidth() / 2, fabricRef.current.getHeight() / 2);
-        fabricRef.current.zoomToPoint(zoomPoint, zoom);
-    };
-
-    useImperativeHandle(ref, () => ({
-        zoomIn: () => fabricRef.current && setZoom(fabricRef.current.getZoom() * 1.1),
-        zoomOut: () => fabricRef.current && setZoom(fabricRef.current.getZoom() / 1.1),
-        resetZoom: () => fabricRef.current && setZoom(1),
-        toJSON: () => fabricRef.current?.toJSON(),
-        loadFromJSON: (json: string | Record<string, unknown>) => {
-            if (!fabricRef.current) return;
-            fabricRef.current.loadFromJSON(json || {}, () => fabricRef.current!.renderAll());
-        },
-    }));
-
+    // Set initial position on client side
     useEffect(() => {
-        if (!canvasElRef.current) return;
-
-        const canvasElement = canvasElRef.current;
-        const fcanvas = new FabricJSCanvas(canvasElement, {
-            isDrawingMode,
-            width,
-            height,
-            selection: false,
-            backgroundColor: theme === "dark" ? "#1a1a1a" : "#ffffff",
-        });
-
-        fabricRef.current = fcanvas;
-
-        fcanvas.freeDrawingBrush = new PencilBrush(fcanvas);
-        fcanvas.freeDrawingBrush.width = brushWidth;
-        fcanvas.freeDrawingBrush.color = brushColor;
-
-        if (onPathCreated) {
-            fcanvas.on("path:created", (opts: PathCreatedEvent) => {
-                onPathCreated(opts.path);
-            });
+        if (typeof window !== "undefined") {
+            setPosition({ x: 20, y: window.innerHeight - 200 });
         }
-
-        // Grid
-        const makeGridPattern = () => {
-            const gridSize = 40;
-            const gridCanvas = document.createElement("canvas");
-            gridCanvas.width = gridSize;
-            gridCanvas.height = gridSize;
-            const ctx = gridCanvas.getContext("2d");
-            if (ctx) {
-                ctx.clearRect(0, 0, gridSize, gridSize);
-                ctx.fillStyle = theme === "dark" ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
-                ctx.beginPath();
-                ctx.arc(gridSize / 2, gridSize / 2, 0.8, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            return gridCanvas;
-        };
-
-        patternCacheRef.current = makeGridPattern();
-
-        if (showGrid && patternCacheRef.current) {
-            fcanvas.set("backgroundColor", new Pattern({ source: patternCacheRef.current, repeat: "repeat" }));
-        }
-
-        if (setCanvasRef) setCanvasRef(fcanvas);
-
-        const wheelHandler = (opt: WheelEvent) => {
-            if (!fabricRef.current) return;
-            if (!(opt.ctrlKey || opt.metaKey)) return;
-            opt.preventDefault();
-            let zoom = fabricRef.current.getZoom();
-            zoom *= 0.999 ** opt.deltaY;
-            zoom = Math.min(Math.max(zoom, 0.2), 4);
-            setZoom(zoom, { x: opt.offsetX, y: opt.offsetY });
-        };
-
-        canvasElement.addEventListener("wheel", wheelHandler, { passive: false });
-
-        return () => {
-            fcanvas.dispose();
-            if (setCanvasRef) setCanvasRef(null);
-            canvasElement.removeEventListener("wheel", wheelHandler);
-        };
     }, []);
 
-    // Dynamic updates
+    // Handle stream updates
     useEffect(() => {
-        if (fabricRef.current) fabricRef.current.isDrawingMode = isDrawingMode;
-    }, [isDrawingMode]);
-
-    useEffect(() => {
-        if (fabricRef.current?.freeDrawingBrush) fabricRef.current.freeDrawingBrush.color = brushColor;
-    }, [brushColor]);
-
-    useEffect(() => {
-        if (fabricRef.current?.freeDrawingBrush) fabricRef.current.freeDrawingBrush.width = brushWidth;
-    }, [brushWidth]);
-
-    useEffect(() => {
-        if (!fabricRef.current) return;
-        if (showGrid && patternCacheRef.current) {
-            fabricRef.current.set("backgroundColor", new Pattern({ source: patternCacheRef.current, repeat: "repeat" }));
-        } else {
-            fabricRef.current.set("backgroundColor", theme === "dark" ? "#1a1a1a" : "#ffffff");
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch((err) => {
+                console.error("Video play error:", err);
+                setError("Failed to play video stream");
+                toast.error("Failed to play video stream");
+            });
+        } else if (videoRef.current && !stream) {
+            videoRef.current.srcObject = null;
         }
-        fabricRef.current.renderAll();
-    }, [showGrid, theme]);
+    }, [stream]);
+
+    // Handle dragging
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (containerRef.current) {
+            setIsDragging(true);
+            dragStartPos.current = {
+                x: e.clientX - position.x,
+                y: e.clientY - position.y,
+            };
+        }
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (isDragging && containerRef.current) {
+            const newX = e.clientX - dragStartPos.current.x;
+            const newY = e.clientY - dragStartPos.current.y;
+            setPosition({ x: newX, y: newY });
+        }
+    };
+
+    const handleMouseUp = () => {
+        setIsDragging(false);
+    };
+
+    // Toggle webcam
+    const toggleWebcam = () => {
+        setUseWebcam(!useWebcam);
+    };
+
+    // Toggle mute
+    const toggleMute = () => {
+        if (stream) {
+            const audioTracks = stream.getAudioTracks();
+            audioTracks.forEach((track) => (track.enabled = !track.enabled));
+            setIsMuted(!isMuted);
+        }
+    };
 
     return (
-        <div className="w-full h-full flex justify-center items-center overflow-auto p-6">
-            <canvas
-                ref={canvasElRef}
-                width={width}
-                height={height}
-                className="block rounded-xl border border-gray-200 shadow-inner"
-                aria-label="drawing-canvas"
-            />
+        <div
+            ref={containerRef}
+            className={`fixed z-40 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md border border-gray-200 dark:border-zinc-700 rounded-xl shadow-lg transition-all duration-200 ${collapsed ? "w-12 h-12" : "w-64 h-48"
+                }`}
+            style={{ left: position.x, top: position.y, cursor: isDragging ? "grabbing" : "grab" }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+        >
+            {collapsed ? (
+                <button
+                    className="w-full h-full flex items-center justify-center text-gray-800 dark:text-gray-200"
+                    onClick={() => setCollapsed(false)}
+                >
+                    <Video className="w-6 h-6" />
+                </button>
+            ) : (
+                <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-zinc-700">
+                        <span className="text-xs text-gray-800 dark:text-gray-200">Video Feed</span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={toggleWebcam}
+                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700"
+                                title={useWebcam ? "Disable Webcam" : "Enable Webcam"}
+                            >
+                                {useWebcam ? (
+                                    <Video className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                                ) : (
+                                    <VideoOff className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                                )}
+                            </button>
+                            <button
+                                onClick={toggleMute}
+                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700"
+                                title={isMuted ? "Unmute" : "Mute"}
+                            >
+                                {isMuted ? (
+                                    <MicOff className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                                ) : (
+                                    <Mic className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setCollapsed(true)}
+                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-700"
+                                title="Collapse"
+                            >
+                                <span className="text-xs text-gray-800 dark:text-gray-200">-</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex-1 relative">
+                        {error && (
+                            <div className="absolute inset-0 flex items-center justify-center text-red-500 text-xs">
+                                {error}
+                            </div>
+                        )}
+                        <video
+                            ref={videoRef}
+                            className={`w-full h-full object-cover rounded-b-xl ${error ? "opacity-50" : ""}`}
+                            autoPlay
+                            muted={isMuted}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
-});
-
-export default Canvas;
+}
