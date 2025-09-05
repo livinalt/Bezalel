@@ -2,7 +2,6 @@
   "/_not-found/page": "app/_not-found/page.js",
   "/board/[roomId]/page": "app/board/[roomId]/page.js",
   "/board/[roomId]/view/page": "app/board/[roomId]/view/page.js",
-  "/create/page": "app/create/page.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
   "/page": "app/page.js"
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import io, { Socket } from "socket.io-client";
-import { debounce } from "lodash";
 import Canvas from "@/components/Canvas";
+import VideoFeed from "@/components/VideoFeed";
 import { Canvas as FabricJSCanvas, Object as FabricObject, Path as FabricPath } from "fabric";
 import { toast } from "sonner";
 import PageSidebar from "@/components/PageSidebar";
@@ -12,43 +12,34 @@ import Toolbar from "@/components/Toolbar";
 import StreamManager from "@/components/StreamManager";
 import { v4 as uuid } from "uuid";
 import ThemeToggle from "@/components/ThemeToggle";
-
-// Define types in Board.tsx
-export type CanvasData = Record<string, unknown>;
-
-export type PageData = {
-    id: string;
-    name: string;
-    canvasData: CanvasData | null;
-};
-
-export interface ExtendedFabricCanvas extends FabricJSCanvas {
-    zoomIn: () => void;
-    zoomOut: () => void;
-    resetZoom: () => void;
-    toJSON: (propertiesToInclude?: string[]) => Record<string, unknown> | undefined;
-    loadFromJSON: (json: string | Record<string, unknown>) => Promise<this>;
-    clone(properties: string[]): Promise<this>;
-    cloneWithoutData(): this; // Changed to this for compatibility
-}
+import { CanvasData, PageData } from "../../../components/types";
 
 export default function Board() {
     const { roomId } = useParams();
 
     const canvasRef = useRef<FabricJSCanvas | null>(null);
+    const canvasComponentRef = useRef<any>(null);
     const socketRef = useRef<Socket | null>(null);
-    const canvasComponentRef = useRef<ExtendedFabricCanvas>(null!); // Non-null assertion to match ToolbarProps
+    const streamManagerRef = useRef<{ handleEnhance: () => Promise<void>; handleCanvasEnhance: () => Promise<void> } | null>(null);
+    const lastSavedState = useRef<string | null>(null);
 
     const [isStreaming, setIsStreaming] = useState(false);
     const [useWebcam, setUseWebcam] = useState(false);
+    const [enhanceWebcam, setEnhanceWebcam] = useState(false);
     const [viewerCount, setViewerCount] = useState(0);
-    const [aiPrompt, setAiPrompt] = useState("");
+    const [aiPrompt, setAiPrompt] = useState(""); // For canvas enhancement
+    const [webcamPrompt, setWebcamPrompt] = useState(""); // New state for webcam enhancement
     const [isDrawingMode, setIsDrawingMode] = useState(true);
     const [brushColor, setBrushColor] = useState("#000000");
     const [brushWidth, setBrushWidth] = useState(3);
     const [viewUrl, setViewUrl] = useState("");
     const [showGrid, setShowGrid] = useState(true);
-    const [streamId, setStreamId] = useState<string | null>(null); // Keep for StreamManager sync
+    const [streamId, setStreamId] = useState<string | null>(null);
+    const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+    const [isMuted, setIsMuted] = useState(false);
+    const [webcamPlaybackUrl, setWebcamPlaybackUrl] = useState<string | null>(null);
+    const [canvasPlaybackUrl, setCanvasPlaybackUrl] = useState<string | null>(null);
+    const [isEnhanced, setIsEnhanced] = useState(false);
 
     const undoStack = useRef<FabricObject[]>([]);
     const redoStack = useRef<FabricObject[]>([]);
@@ -61,6 +52,7 @@ export default function Board() {
         const newPage = { id: uuid(), name: `Page ${pages.length + 1}`, canvasData: null };
         setPages((prev) => [...prev, newPage]);
         setActivePageId(newPage.id);
+        lastSavedState.current = null;
     };
 
     const handleRenamePage = (id: string, newName: string) => {
@@ -80,18 +72,26 @@ export default function Board() {
             const remaining = prev.filter((p) => p.id !== id);
             if (activePageId === id) {
                 setActivePageId(remaining[0].id);
+                lastSavedState.current = null;
             }
             return remaining;
         });
     };
 
-    const saveCanvasState = debounce((canvas: FabricJSCanvas, pageId: string) => {
-        setPages((prevPages) =>
-            prevPages.map((p) =>
-                p.id === pageId ? { ...p, canvasData: canvas.toJSON() } : p
-            )
-        );
-    }, 500);
+    const saveCanvasState = useCallback((canvas: FabricJSCanvas, pageId: string) => {
+        if (!canvas) return;
+        const canvasJSON = canvas.toJSON(["selectable", "id"]);
+        const canvasJSONStr = JSON.stringify(canvasJSON);
+        if (canvasJSONStr === lastSavedState.current) return;
+        setPages((prevPages) => {
+            const newPages = prevPages.map((p) =>
+                p.id === pageId ? { ...p, canvasData: canvasJSON } : p
+            );
+            lastSavedState.current = canvasJSONStr;
+            console.log("Saved canvas state, objects:", canvas.getObjects());
+            return newPages;
+        });
+    }, []);
 
     useEffect(() => {
         if (!canvasRef.current) return;
@@ -117,17 +117,29 @@ export default function Board() {
         const activePage = pages.find((p) => p.id === activePageId);
         if (!activePage) return;
 
-        canvasRef.current.clear();
-        undoStack.current = [];
-        redoStack.current = [];
-
-        if (activePage.canvasData) {
-            canvasRef.current.loadFromJSON(activePage.canvasData, () => {
-                canvasRef.current!.renderAll();
-            });
-        } else {
-            canvasRef.current.renderAll();
+        const canvasJSONStr = JSON.stringify(activePage.canvasData);
+        if (canvasJSONStr === lastSavedState.current) {
+            console.log("Skipping load, state unchanged");
+            return;
         }
+
+        if (!activePage.canvasData) {
+            console.log("Clearing canvas for new page");
+            canvasRef.current.clear();
+            undoStack.current = [];
+            redoStack.current = [];
+            canvasRef.current.renderAll();
+            lastSavedState.current = null;
+            return;
+        }
+
+        canvasRef.current.loadFromJSON(activePage.canvasData, () => {
+            undoStack.current = canvasRef.current!.getObjects().slice() as FabricObject[];
+            redoStack.current = [];
+            canvasRef.current!.renderAll();
+            lastSavedState.current = canvasJSONStr;
+            console.log("Loaded canvas state, objects:", canvasRef.current!.getObjects());
+        });
     }, [activePageId, pages]);
 
     useEffect(() => {
@@ -159,8 +171,11 @@ export default function Board() {
 
     const handlePathCreated = (path: FabricPath) => {
         if (canvasRef.current && path) {
+            console.log("Path created in Board:", path);
+            canvasRef.current.add(path);
             undoStack.current.push(path as unknown as FabricObject);
             redoStack.current = [];
+            canvasRef.current.requestRenderAll();
             saveCanvasState(canvasRef.current, activePageId);
         }
     };
@@ -171,7 +186,7 @@ export default function Board() {
         if (last) {
             redoStack.current.push(last);
             canvasRef.current.remove(last);
-            canvasRef.current.requestRenderAll?.();
+            canvasRef.current.requestRenderAll();
             saveCanvasState(canvasRef.current, activePageId);
         }
     };
@@ -182,7 +197,7 @@ export default function Board() {
         if (last) {
             undoStack.current.push(last);
             canvasRef.current.add(last);
-            canvasRef.current.requestRenderAll?.();
+            canvasRef.current.requestRenderAll();
             saveCanvasState(canvasRef.current, activePageId);
         }
     };
@@ -193,10 +208,8 @@ export default function Board() {
         toast.success("View link copied to clipboard!");
     };
 
-    const setStreamingDebounced = debounce((value: boolean) => setIsStreaming(value), 300);
-
-    const handleEnhance = () => {
-        // StreamManager handles the logic
+    const handleCanvasEnhance = () => {
+        streamManagerRef.current?.handleCanvasEnhance();
     };
 
     if (!roomId || typeof roomId !== "string") {
@@ -209,9 +222,7 @@ export default function Board() {
                 <div className="flex items-center gap-3">
                     <h1 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Bezalel Board</h1>
                     <span className="text-xs text-gray-500 dark:text-gray-400">/ {roomId}</span>
-                    {streamId && (
-                        <p className="text-xs text-gray-500">Stream ID: {streamId}</p> // Display streamId to use it
-                    )}
+                    {streamId && <p className="text-xs text-gray-500">Stream ID: {streamId}</p>}
                 </div>
                 <div className="flex items-center gap-2">
                     <input
@@ -236,8 +247,7 @@ export default function Board() {
 
             <main className="absolute top-14 bottom-0 left-0 right-0 flex">
                 <PageSidebar
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    pages={pages as any} // Temporary cast to bypass PageData mismatch
+                    pages={pages}
                     activePageId={activePageId}
                     onSelectPage={setActivePageId}
                     onAddPage={handleAddPage}
@@ -245,7 +255,7 @@ export default function Board() {
                     onDeletePage={handleDeletePage}
                 />
 
-                <div className="flex-1 flex items-center justify-center overflow-auto">
+                <div className="flex-1 flex items-center justify-center">
                     <Canvas
                         ref={canvasComponentRef}
                         isDrawingMode={isDrawingMode}
@@ -256,19 +266,37 @@ export default function Board() {
                         brushColor={brushColor}
                         brushWidth={brushWidth}
                         showGrid={showGrid}
+                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                     />
                 </div>
 
                 <StreamManager
+                    ref={streamManagerRef}
                     isStreaming={isStreaming}
                     useWebcam={useWebcam}
+                    enhanceWebcam={enhanceWebcam}
                     aiPrompt={aiPrompt}
+                    webcamPrompt={webcamPrompt} // Pass new webcam prompt
                     roomId={roomId}
                     socketRef={socketRef}
                     canvasRef={canvasRef}
                     setStreamId={setStreamId}
-                    onEnhance={handleEnhance}
+                    webcamStream={webcamStream}
+                    setWebcamPlaybackUrl={setWebcamPlaybackUrl}
+                    setIsEnhanced={setIsEnhanced}
+                    setCanvasPlaybackUrl={setCanvasPlaybackUrl}
+                />
+
+                <VideoFeed
+                    useWebcam={useWebcam}
                     setUseWebcam={setUseWebcam}
+                    isMuted={isMuted}
+                    setIsMuted={setIsMuted}
+                    onStreamChange={setWebcamStream}
+                    isEnhanced={isEnhanced}
+                    enhanceWebcam={enhanceWebcam}
+                    webcamPlaybackUrl={webcamPlaybackUrl}
+                    canvasPlaybackUrl={canvasPlaybackUrl}
                 />
             </main>
 
@@ -284,11 +312,17 @@ export default function Board() {
                 canvasComponentRef={canvasComponentRef}
                 aiPrompt={aiPrompt}
                 setAiPrompt={setAiPrompt}
-                handleEnhance={handleEnhance}
+                webcamPrompt={webcamPrompt} // Pass new webcam prompt
+                setWebcamPrompt={setWebcamPrompt} // Pass setter for webcam prompt
                 showGrid={showGrid}
                 setShowGrid={setShowGrid}
                 isStreaming={isStreaming}
-                setIsStreaming={setStreamingDebounced}
+                setIsStreaming={setIsStreaming}
+                handleCanvasEnhance={handleCanvasEnhance}
+                useWebcam={useWebcam}
+                setUseWebcam={setUseWebcam}
+                enhanceWebcam={enhanceWebcam}
+                setEnhanceWebcam={setEnhanceWebcam}
             />
         </div>
     );

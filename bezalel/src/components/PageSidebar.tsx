@@ -3,9 +3,8 @@
 import { useState, useCallback } from "react";
 import { Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 
-
 interface CanvasData {
-    [key: string]: unknown; 
+    [key: string]: unknown;
 }
 
 interface PageData {
@@ -35,9 +34,14 @@ export default function PageSidebar({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState("");
 
-    // Memoize event handlers to prevent unnecessary re-renders
-    const handleToggleCollapse = useCallback(() => setCollapsed((prev) => !prev), []);
-    const handlePageSelect = useCallback((id: string) => onSelectPage(id), [onSelectPage]);
+    const handleToggleCollapse = useCallback(
+        () => setCollapsed((prev) => !prev),
+        []
+    );
+    const handlePageSelect = useCallback(
+        (id: string) => onSelectPage(id),
+        [onSelectPage]
+    );
     const handleAddPage = useCallback(() => onAddPage(), [onAddPage]);
     const handleRename = useCallback(
         (id: string, name: string) => {
@@ -56,48 +60,52 @@ export default function PageSidebar({
 
     return (
         <aside
-            className={`h-full border-r border-gray-200 bg-gray-50 dark:bg-zinc-900 transition-all duration-300 ${collapsed ? "w-14" : "w-56"
-                }`}
+            className={`h-full bg-zinc-50 dark:bg-zinc-900 transition-all duration-300 ease-in-out border-r border-zinc-200 dark:border-zinc-800 
+      ${collapsed ? "w-12" : "w-52"} flex flex-col`}
         >
-            {/* Collapse toggle */}
-            <div className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-zinc-700">
+            {/* Header */}
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-zinc-200 dark:border-zinc-800">
                 {!collapsed && (
-                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Pages</span>
+                    <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+                        Pages
+                    </span>
                 )}
                 <button
                     onClick={handleToggleCollapse}
-                    className="p-1 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-md"
-                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-md transition-colors"
                 >
                     {collapsed ? (
-                        <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                        <ChevronRight className="w-4 h-4 text-zinc-500" />
                     ) : (
-                        <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                        <ChevronLeft className="w-4 h-4 text-zinc-500" />
                     )}
                 </button>
             </div>
 
-            {/* Add Page button (always visible at top) */}
+            {/* Add Page */}
             {!collapsed && (
-                <div className="p-2 border-b border-gray-200 dark:border-zinc-700">
+                <div className="px-2 py-1.5 border-b border-zinc-200 dark:border-zinc-800">
                     <button
                         onClick={handleAddPage}
-                        className="w-full flex items-center gap-1 justify-center px-2 py-1 text-sm bg-gray-200 dark:bg-zinc-800 hover:bg-gray-300 dark:hover:bg-zinc-700 rounded-md"
-                        aria-label="Add new page"
+                        className="w-full flex items-center gap-1.5 justify-center px-2 py-1 text-[12px] 
+              text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 
+              rounded-md transition-colors"
                     >
-                        <Plus className="w-4 h-4" /> New Page
+                        <Plus className="w-3.5 h-3.5" />
+                        New Page
                     </button>
                 </div>
             )}
 
-            {/* Pages list */}
-            <ul className="overflow-y-auto" style={{ maxHeight: "calc(100% - 3.5rem)" }}>
+            {/* Pages */}
+            <ul className="flex-1 overflow-y-auto px-1.5 py-1 space-y-0.5">
                 {pages.map((page) => (
                     <li
                         key={page.id}
-                        className={`group flex items-center justify-between px-2 py-1 cursor-pointer text-sm ${activePageId === page.id
-                                ? "bg-gray-200 font-bold dark:bg-zinc-800"
-                                : "hover:bg-gray-100 dark:hover:bg-zinc-700"
+                        className={`group flex items-center justify-between px-2 py-1 rounded-md cursor-pointer text-[12px] transition-colors
+              ${activePageId === page.id
+                                ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 font-medium"
+                                : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
                             }`}
                         onClick={() => handlePageSelect(page.id)}
                         onDoubleClick={() => {
@@ -119,8 +127,7 @@ export default function PageSidebar({
                                     }
                                 }}
                                 autoFocus
-                                className="flex-1 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded px-1 text-sm"
-                                aria-label={`Edit page name for ${page.name}`}
+                                className="flex-1 bg-transparent border-b border-zinc-400 focus:border-zinc-600 outline-none text-[12px] px-0.5"
                             />
                         ) : (
                             <span className="truncate flex-1">{page.name}</span>
@@ -128,10 +135,9 @@ export default function PageSidebar({
                         {!collapsed && (
                             <button
                                 onClick={(e) => handleDelete(e, page.id)}
-                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-900 rounded-md"
-                                aria-label={`Delete page ${page.name}`}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900 transition-colors"
                             >
-                                <Trash2 className="w-4 h-4 text-red-500" />
+                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
                             </button>
                         )}
                     </li>
