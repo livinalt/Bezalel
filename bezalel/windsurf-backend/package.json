@@ -16,6 +16,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "nanoid": "^5.1.5",
     "replicate": "^1.1.0",
     "socket.io": "^4.8.1"
   },

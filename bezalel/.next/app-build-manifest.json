@@ -57,6 +57,25 @@
       "static/chunks/bezalel_a0ff3932._.js",
       "static/chunks/turbopack-bezalel_71f4ef06._.js"
     ],
+    "/create/page": [
+      "static/chunks/8887b_next_dist_9899660f._.js",
+      "static/chunks/bezalel_src_app_favicon_ico_mjs_9aee61c7._.js",
+      "static/chunks/[root-of-the-server]__d8a0ea1d._.css",
+      "static/chunks/8887b_3c15da77._.js",
+      "static/chunks/bezalel_src_app_layout_tsx_8072126c._.js",
+      "static/chunks/8887b_next_dist_client_components_builtin_global-error_18683930.js",
+      "static/chunks/bezalel_6efe0fb2._.js",
+      "static/chunks/bezalel_src_app_create_page_tsx_18683930._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_7ef643fa._.js",
+      "static/chunks/8887b_next_dist_compiled_react-dom_7e94fdc3._.js",
+      "static/chunks/8887b_next_dist_compiled_next-devtools_index_1aa3db5a.js",
+      "static/chunks/8887b_next_dist_compiled_98df9e13._.js",
+      "static/chunks/8887b_next_dist_client_912fbc52._.js",
+      "static/chunks/8887b_next_dist_e5a7c15e._.js",
+      "static/chunks/8887b_@swc_helpers_cjs_9c5c860c._.js",
+      "static/chunks/bezalel_a0ff3932._.js",
+      "static/chunks/turbopack-bezalel_71f4ef06._.js"
+    ],
     "/page": [
       "static/chunks/8887b_next_dist_9899660f._.js",
       "static/chunks/bezalel_src_app_favicon_ico_mjs_9aee61c7._.js",
