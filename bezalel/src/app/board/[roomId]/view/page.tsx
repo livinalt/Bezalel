@@ -96,15 +96,9 @@ export default function View() {
             toast.success("Received stream URLs");
             if (canvasPlaybackUrl) {
                 loadPlayback(canvasPlaybackUrl, canvasVideoRef.current, 'canvas');
-            } else {
-                console.warn("No canvasPlaybackUrl received");
-                toast.info("No canvas stream available");
             }
             if (webcamPlaybackUrl) {
                 loadPlayback(webcamPlaybackUrl, webcamVideoRef.current, 'webcam');
-            } else {
-                console.warn("No webcamPlaybackUrl received");
-                toast.info("No webcam stream available");
             }
         });
 

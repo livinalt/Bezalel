@@ -5,11 +5,11 @@ import { useParams } from "next/navigation";
 import io, { Socket } from "socket.io-client";
 import Canvas from "@/components/Canvas";
 import VideoFeed from "@/components/VideoFeed";
-import { Canvas as FabricJSCanvas, Object as FabricObject, Path as FabricPath } from "fabric";
-import { toast } from "sonner";
-import PageSidebar from "@/components/PageSidebar";
 import Toolbar from "@/components/Toolbar";
 import StreamManager from "@/components/StreamManager";
+import PageSidebar from "@/components/PageSidebar";
+import { Canvas as FabricJSCanvas, Path as FabricPath } from "fabric";
+import { toast } from "sonner";
 import { v4 as uuid } from "uuid";
 import ThemeToggle from "@/components/ThemeToggle";
 import { CanvasData, PageData } from "../../../components/types";
@@ -27,11 +27,13 @@ export default function Board() {
     const [useWebcam, setUseWebcam] = useState(false);
     const [enhanceWebcam, setEnhanceWebcam] = useState(false);
     const [viewerCount, setViewerCount] = useState(0);
-    const [aiPrompt, setAiPrompt] = useState(""); // For canvas enhancement
-    const [webcamPrompt, setWebcamPrompt] = useState(""); // New state for webcam enhancement
+    const [aiPrompt, setAiPrompt] = useState("");
+    const [webcamPrompt, setWebcamPrompt] = useState("");
     const [isDrawingMode, setIsDrawingMode] = useState(true);
+    const [activeTool, setActiveTool] = useState("pencil"); // Added activeTool state
     const [brushColor, setBrushColor] = useState("#000000");
     const [brushWidth, setBrushWidth] = useState(3);
+    const [brushOpacity, setBrushOpacity] = useState(1);
     const [viewUrl, setViewUrl] = useState("");
     const [showGrid, setShowGrid] = useState(true);
     const [streamId, setStreamId] = useState<string | null>(null);
@@ -40,9 +42,6 @@ export default function Board() {
     const [webcamPlaybackUrl, setWebcamPlaybackUrl] = useState<string | null>(null);
     const [canvasPlaybackUrl, setCanvasPlaybackUrl] = useState<string | null>(null);
     const [isEnhanced, setIsEnhanced] = useState(false);
-
-    const undoStack = useRef<FabricObject[]>([]);
-    const redoStack = useRef<FabricObject[]>([]);
 
     const initialPage = { id: uuid(), name: "Page 1", canvasData: null };
     const [pages, setPages] = useState<PageData[]>([initialPage]);
@@ -88,10 +87,27 @@ export default function Board() {
                 p.id === pageId ? { ...p, canvasData: canvasJSON } : p
             );
             lastSavedState.current = canvasJSONStr;
-            console.log("Saved canvas state, objects:", canvas.getObjects());
             return newPages;
         });
     }, []);
+
+    const handleUndo = () => {
+        canvasComponentRef.current?.undo();
+        saveCanvasState(canvasRef.current!, activePageId);
+    };
+
+    const handleRedo = () => {
+        canvasComponentRef.current?.redo();
+        saveCanvasState(canvasRef.current!, activePageId);
+    };
+
+    const handlePathCreated = (path: FabricPath) => {
+        if (canvasRef.current && path) {
+            path.set({ id: uuid() });
+            canvasRef.current.add(path);
+            saveCanvasState(canvasRef.current, activePageId);
+        }
+    };
 
     useEffect(() => {
         if (!canvasRef.current) return;
@@ -118,27 +134,18 @@ export default function Board() {
         if (!activePage) return;
 
         const canvasJSONStr = JSON.stringify(activePage.canvasData);
-        if (canvasJSONStr === lastSavedState.current) {
-            console.log("Skipping load, state unchanged");
-            return;
-        }
+        if (canvasJSONStr === lastSavedState.current) return;
 
         if (!activePage.canvasData) {
-            console.log("Clearing canvas for new page");
             canvasRef.current.clear();
-            undoStack.current = [];
-            redoStack.current = [];
             canvasRef.current.renderAll();
             lastSavedState.current = null;
             return;
         }
 
         canvasRef.current.loadFromJSON(activePage.canvasData, () => {
-            undoStack.current = canvasRef.current!.getObjects().slice() as FabricObject[];
-            redoStack.current = [];
             canvasRef.current!.renderAll();
             lastSavedState.current = canvasJSONStr;
-            console.log("Loaded canvas state, objects:", canvasRef.current!.getObjects());
         });
     }, [activePageId, pages]);
 
@@ -156,7 +163,6 @@ export default function Board() {
             socket.emit("joinSession", roomId);
         });
         socket.on("viewerCount", (count: number) => {
-            console.log("Viewer count:", count);
             setViewerCount(count);
         });
         socket.on("connect_error", (err) => {
@@ -164,43 +170,9 @@ export default function Board() {
             toast.error("Failed to connect to server");
         });
         return () => {
-            console.log("Disconnecting socket");
             socket.disconnect();
         };
     }, [roomId]);
-
-    const handlePathCreated = (path: FabricPath) => {
-        if (canvasRef.current && path) {
-            console.log("Path created in Board:", path);
-            canvasRef.current.add(path);
-            undoStack.current.push(path as unknown as FabricObject);
-            redoStack.current = [];
-            canvasRef.current.requestRenderAll();
-            saveCanvasState(canvasRef.current, activePageId);
-        }
-    };
-
-    const handleUndo = () => {
-        if (!canvasRef.current) return;
-        const last = undoStack.current.pop();
-        if (last) {
-            redoStack.current.push(last);
-            canvasRef.current.remove(last);
-            canvasRef.current.requestRenderAll();
-            saveCanvasState(canvasRef.current, activePageId);
-        }
-    };
-
-    const handleRedo = () => {
-        if (!canvasRef.current) return;
-        const last = redoStack.current.pop();
-        if (last) {
-            undoStack.current.push(last);
-            canvasRef.current.add(last);
-            canvasRef.current.requestRenderAll();
-            saveCanvasState(canvasRef.current, activePageId);
-        }
-    };
 
     const copyLink = () => {
         if (!viewUrl) return;
@@ -259,14 +231,15 @@ export default function Board() {
                     <Canvas
                         ref={canvasComponentRef}
                         isDrawingMode={isDrawingMode}
+                        activeTool={activeTool}
                         setCanvasRef={(c) => (canvasRef.current = c)}
                         onPathCreated={handlePathCreated}
                         width={1920}
                         height={1080}
                         brushColor={brushColor}
                         brushWidth={brushWidth}
+                        brushOpacity={brushOpacity}
                         showGrid={showGrid}
-                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                     />
                 </div>
 
@@ -276,15 +249,15 @@ export default function Board() {
                     useWebcam={useWebcam}
                     enhanceWebcam={enhanceWebcam}
                     aiPrompt={aiPrompt}
-                    webcamPrompt={webcamPrompt} // Pass new webcam prompt
+                    webcamPrompt={webcamPrompt}
                     roomId={roomId}
                     socketRef={socketRef}
                     canvasRef={canvasRef}
                     setStreamId={setStreamId}
                     webcamStream={webcamStream}
                     setWebcamPlaybackUrl={setWebcamPlaybackUrl}
-                    setIsEnhanced={setIsEnhanced}
                     setCanvasPlaybackUrl={setCanvasPlaybackUrl}
+                    setIsEnhanced={setIsEnhanced}
                 />
 
                 <VideoFeed
@@ -303,17 +276,21 @@ export default function Board() {
             <Toolbar
                 isDrawingMode={isDrawingMode}
                 setIsDrawingMode={setIsDrawingMode}
+                activeTool={activeTool}
+                setActiveTool={setActiveTool}
                 brushColor={brushColor}
                 setBrushColor={setBrushColor}
                 brushWidth={brushWidth}
                 setBrushWidth={setBrushWidth}
+                brushOpacity={brushOpacity}
+                setBrushOpacity={setBrushOpacity}
                 handleUndo={handleUndo}
                 handleRedo={handleRedo}
                 canvasComponentRef={canvasComponentRef}
                 aiPrompt={aiPrompt}
                 setAiPrompt={setAiPrompt}
-                webcamPrompt={webcamPrompt} // Pass new webcam prompt
-                setWebcamPrompt={setWebcamPrompt} // Pass setter for webcam prompt
+                webcamPrompt={webcamPrompt}
+                setWebcamPrompt={setWebcamPrompt}
                 showGrid={showGrid}
                 setShowGrid={setShowGrid}
                 isStreaming={isStreaming}

@@ -64,7 +64,7 @@ export default function PageSidebar({
       ${collapsed ? "w-12" : "w-52"} flex flex-col`}
         >
             {/* Header */}
-            <div className="flex items-center justify-between px-2 py-1.5 border-b border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center justify-between px-2 py-1.5 dark:border-zinc-800">
                 {!collapsed && (
                     <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
                         Pages
@@ -84,7 +84,7 @@ export default function PageSidebar({
 
             {/* Add Page */}
             {!collapsed && (
-                <div className="px-2 py-1.5 border-b border-zinc-200 dark:border-zinc-800">
+                <div className="px-2 py-1.5 border-b dark:border-zinc-800">
                     <button
                         onClick={handleAddPage}
                         className="w-full flex items-center gap-1.5 justify-center px-2 py-1 text-[12px] 
