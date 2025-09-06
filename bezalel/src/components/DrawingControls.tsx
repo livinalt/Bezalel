@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Dispatch, RefObject, SetStateAction, Fragment } from "react";
@@ -76,11 +77,13 @@ export default function DrawingControls({
     const updateBrush = (color?: string, width?: number) => {
         const canvas = canvasRef.current;
         if (canvas && canvas.isDrawingMode && canvas.freeDrawingBrush) {
-            if (color) {
+            if (color !== undefined) {
                 canvas.freeDrawingBrush.color = activeTool === "eraser" ? "transparent" : color;
                 canvas.freeDrawingBrush.globalCompositeOperation = activeTool === "eraser" ? "destination-out" : "source-over";
             }
-            if (width) canvas.freeDrawingBrush.width = width;
+            if (width !== undefined) {
+                canvas.freeDrawingBrush.width = width;
+            }
         }
     };
 
@@ -92,7 +95,10 @@ export default function DrawingControls({
                 onClick={() => {
                     setActiveTool("select");
                     setIsDrawingMode(false);
-                    if (canvasRef.current) canvasRef.current.isDrawingMode = false;
+                    if (canvasRef.current) {
+                        canvasRef.current.isDrawingMode = false;
+                        canvasRef.current.selection = true;
+                    }
                 }}
             >
                 <MousePointer className="w-4 h-4" />
@@ -146,27 +152,42 @@ export default function DrawingControls({
                         <ShapeMenuItem
                             icon={<Square className="w-4 h-4" />}
                             label="Rectangle"
-                            onClick={() => setActiveTool("rectangle")}
+                            onClick={() => {
+                                setActiveTool("rectangle");
+                                setIsDrawingMode(false);
+                            }}
                         />
                         <ShapeMenuItem
                             icon={<Minus className="w-4 h-4" />}
                             label="Line"
-                            onClick={() => setActiveTool("line")}
+                            onClick={() => {
+                                setActiveTool("line");
+                                setIsDrawingMode(false);
+                            }}
                         />
                         <ShapeMenuItem
                             icon={<Circle className="w-4 h-4" />}
                             label="Circle"
-                            onClick={() => setActiveTool("circle")}
+                            onClick={() => {
+                                setActiveTool("circle");
+                                setIsDrawingMode(false);
+                            }}
                         />
                         <ShapeMenuItem
                             icon={<Triangle className="w-4 h-4" />}
                             label="Triangle"
-                            onClick={() => setActiveTool("triangle")}
+                            onClick={() => {
+                                setActiveTool("triangle");
+                                setIsDrawingMode(false);
+                            }}
                         />
                         <ShapeMenuItem
                             icon={<Minus className="w-4 h-4 rotate-45" />}
                             label="Arrow"
-                            onClick={() => setActiveTool("arrow")}
+                            onClick={() => {
+                                setActiveTool("arrow");
+                                setIsDrawingMode(false);
+                            }}
                         />
                     </Menu.Items>
                 </Transition>

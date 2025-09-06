@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
@@ -72,9 +73,10 @@ const Canvas = forwardRef(function Canvas(
 
     const saveState = () => {
         if (fabricRef.current) {
-            const state = fabricRef.current.toJSON(["selectable", "id"]);
-            if (JSON.stringify(state) !== JSON.stringify(historyRef.current[historyRef.current.length - 1])) {
-                historyRef.current = [...historyRef.current.slice(-49), state];
+            const state = fabricRef.current.toJSON(["selectable", "id", "fill", "stroke", "strokeWidth", "opacity"]);
+            if (historyRef.current.length === 0 || JSON.stringify(state) !== JSON.stringify(historyRef.current[historyRef.current.length - 1])) {
+                historyRef.current.push(state);
+                if (historyRef.current.length > 50) historyRef.current.shift(); // Limit history to 50 states
                 redoStackRef.current = [];
             }
         }
@@ -107,7 +109,7 @@ const Canvas = forwardRef(function Canvas(
         zoomIn: () => fabricRef.current && setZoom(fabricRef.current.getZoom() * 1.1),
         zoomOut: () => fabricRef.current && setZoom(fabricRef.current.getZoom() / 1.1),
         resetZoom: () => fabricRef.current && setZoom(1),
-        toJSON: () => fabricRef.current?.toJSON(["selectable", "id"]),
+        toJSON: () => fabricRef.current?.toJSON(["selectable", "id", "fill", "stroke", "strokeWidth", "opacity"]),
         loadFromJSON: (json: string | Record<string, unknown>) => {
             if (!fabricRef.current) return;
             fabricRef.current.loadFromJSON(json || {}, () => {
@@ -117,9 +119,10 @@ const Canvas = forwardRef(function Canvas(
         },
         undo: () => {
             if (historyRef.current.length <= 1 || !fabricRef.current) return;
-            const currentState = fabricRef.current.toJSON(["selectable", "id"]);
+            const currentState = fabricRef.current.toJSON(["selectable", "id", "fill", "stroke", "strokeWidth", "opacity"]);
             redoStackRef.current.push(currentState);
-            const prevState = historyRef.current.pop();
+            historyRef.current.pop(); // Remove current state
+            const prevState = historyRef.current[historyRef.current.length - 1] || { objects: [] };
             fabricRef.current.loadFromJSON(prevState, () => {
                 fabricRef.current!.renderAll();
                 updateGrid();
@@ -127,7 +130,7 @@ const Canvas = forwardRef(function Canvas(
         },
         redo: () => {
             if (redoStackRef.current.length === 0 || !fabricRef.current) return;
-            const currentState = fabricRef.current.toJSON(["selectable", "id"]);
+            const currentState = fabricRef.current.toJSON(["selectable", "id", "fill", "stroke", "strokeWidth", "opacity"]);
             historyRef.current.push(currentState);
             const nextState = redoStackRef.current.pop();
             fabricRef.current.loadFromJSON(nextState, () => {
@@ -165,7 +168,7 @@ const Canvas = forwardRef(function Canvas(
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        objects: activeObjects.map((obj) => obj.toJSON(["selectable", "id"])),
+                        objects: activeObjects.map((obj) => obj.toJSON(["selectable", "id", "fill", "stroke", "strokeWidth", "opacity"])),
                         prompt,
                     }),
                 });
@@ -240,8 +243,8 @@ const Canvas = forwardRef(function Canvas(
 
         canvasElement.addEventListener("wheel", wheelHandler, { passive: false });
         saveState();
-        fcanvas.on("object:modified", saveState);
         fcanvas.on("object:added", saveState);
+        fcanvas.on("object:modified", saveState);
         fcanvas.on("object:removed", saveState);
 
         return () => {
@@ -288,8 +291,10 @@ const Canvas = forwardRef(function Canvas(
             const fcanvas = fabricRef.current;
             if (!fcanvas) return;
 
-            if (["rectangle", "line", "circle", "triangle", "arrow"].includes(activeTool)) {
+            const shapeTools = ["rectangle", "line", "circle", "triangle", "arrow"];
+            if (shapeTools.includes(activeTool)) {
                 fcanvas.isDrawingMode = false;
+                fcanvas.selection = false; // Disable selection while drawing shapes
                 fcanvas.on("mouse:down", (o) => {
                     if (isDrawingShape.current) return;
                     if (o.target) return; // Don't start new shape if clicking on existing object
@@ -375,7 +380,10 @@ const Canvas = forwardRef(function Canvas(
                             id: uuid(),
                         });
                     }
-                    fcanvas.add(currentShape.current!);
+                    if (currentShape.current) {
+                        fcanvas.add(currentShape.current);
+                        fcanvas.renderAll();
+                    }
                 });
                 fcanvas.on("mouse:move", (o) => {
                     if (!isDrawingShape.current || !currentShape.current) return;
@@ -435,13 +443,15 @@ const Canvas = forwardRef(function Canvas(
                 });
                 fcanvas.on("mouse:up", () => {
                     if (currentShape.current) {
-                        saveState();
+                        currentShape.current.set({ selectable: true });
                         fabricRef.current?.setActiveObject(currentShape.current);
+                        saveState();
                         fabricRef.current?.renderAll();
                     }
                     isDrawingShape.current = false;
                     currentShape.current = null;
                     startPoint.current = null;
+                    fcanvas.selection = activeTool === "select"; // Restore selection mode if needed
                 });
             } else {
                 fcanvas.off("mouse:down");
