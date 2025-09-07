@@ -49,3 +49,39 @@
 {"level":"info","message":"New socket connection","socketId":"LtTXA-0urU7_I-ohAAAa","timestamp":"2025-09-07T14:44:56.614Z"}
 {"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"LtTXA-0urU7_I-ohAAAa","timestamp":"2025-09-07T14:44:56.683Z","viewerCount":1}
 {"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"LtTXA-0urU7_I-ohAAAa","timestamp":"2025-09-07T14:44:56.826Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"LtTXA-0urU7_I-ohAAAa","timestamp":"2025-09-07T14:53:59.032Z"}
+{"level":"info","message":"New socket connection","socketId":"OE1Io7bOQfgHzxarAAAc","timestamp":"2025-09-07T14:54:01.454Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"OE1Io7bOQfgHzxarAAAc","timestamp":"2025-09-07T14:54:01.562Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"OE1Io7bOQfgHzxarAAAc","timestamp":"2025-09-07T14:54:01.780Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"OE1Io7bOQfgHzxarAAAc","timestamp":"2025-09-07T14:58:59.961Z"}
+{"level":"info","message":"New socket connection","socketId":"Mdva1vpJqfYBTIePAAAe","timestamp":"2025-09-07T14:59:02.373Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"Mdva1vpJqfYBTIePAAAe","timestamp":"2025-09-07T14:59:02.481Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"Mdva1vpJqfYBTIePAAAe","timestamp":"2025-09-07T14:59:02.619Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"Mdva1vpJqfYBTIePAAAe","timestamp":"2025-09-07T15:17:38.710Z"}
+{"level":"info","message":"New socket connection","socketId":"a-ZFh7eBa1Biu_WxAAAg","timestamp":"2025-09-07T15:35:50.544Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"a-ZFh7eBa1Biu_WxAAAg","timestamp":"2025-09-07T15:35:50.671Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"a-ZFh7eBa1Biu_WxAAAg","timestamp":"2025-09-07T15:35:50.825Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"a-ZFh7eBa1Biu_WxAAAg","timestamp":"2025-09-07T15:42:33.794Z"}
+{"level":"info","message":"New socket connection","socketId":"JdnEho02aERZTp1AAAAi","timestamp":"2025-09-07T15:42:36.197Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"JdnEho02aERZTp1AAAAi","timestamp":"2025-09-07T15:42:36.352Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"JdnEho02aERZTp1AAAAi","timestamp":"2025-09-07T15:42:36.471Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"JdnEho02aERZTp1AAAAi","timestamp":"2025-09-07T15:45:54.466Z"}
+{"level":"info","message":"New socket connection","socketId":"RweRzFROPapXk9wFAAAk","timestamp":"2025-09-07T15:45:57.098Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"RweRzFROPapXk9wFAAAk","timestamp":"2025-09-07T15:45:57.208Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"RweRzFROPapXk9wFAAAk","timestamp":"2025-09-07T15:45:57.418Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"RweRzFROPapXk9wFAAAk","timestamp":"2025-09-07T15:48:55.759Z"}
+{"level":"info","message":"New socket connection","socketId":"3jjvGlyxG6jQufhwAAAm","timestamp":"2025-09-07T15:48:57.992Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"3jjvGlyxG6jQufhwAAAm","timestamp":"2025-09-07T15:48:58.122Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"3jjvGlyxG6jQufhwAAAm","timestamp":"2025-09-07T15:48:58.347Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"3jjvGlyxG6jQufhwAAAm","timestamp":"2025-09-07T15:53:01.613Z"}
+{"level":"info","message":"New socket connection","socketId":"Qed3C66oBg3bOgi5AAAo","timestamp":"2025-09-07T15:53:03.823Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"Qed3C66oBg3bOgi5AAAo","timestamp":"2025-09-07T15:53:03.940Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"Qed3C66oBg3bOgi5AAAo","timestamp":"2025-09-07T15:53:04.194Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket disconnected","socketId":"Qed3C66oBg3bOgi5AAAo","timestamp":"2025-09-07T15:58:39.302Z"}
+{"level":"info","message":"New socket connection","socketId":"Zm311uyRxSUUcVitAAAq","timestamp":"2025-09-07T16:00:37.723Z"}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"Zm311uyRxSUUcVitAAAq","timestamp":"2025-09-07T16:00:37.858Z","webcamPlaybackUrl":null}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"Zm311uyRxSUUcVitAAAq","timestamp":"2025-09-07T16:00:38.028Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"Zm311uyRxSUUcVitAAAq","timestamp":"2025-09-07T16:01:53.931Z"}
+{"level":"info","message":"New socket connection","socketId":"YfRk5FFOjwIGEV8PAAAs","timestamp":"2025-09-07T16:02:02.562Z"}
+{"level":"info","message":"Socket joined room","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"YfRk5FFOjwIGEV8PAAAs","timestamp":"2025-09-07T16:02:02.606Z","viewerCount":1}
+{"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"f71f3f5f-ca9a-4793-8439-b56cd33ffe66","socketId":"YfRk5FFOjwIGEV8PAAAs","timestamp":"2025-09-07T16:02:02.773Z","webcamPlaybackUrl":null}

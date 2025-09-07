@@ -48,23 +48,20 @@ export default function StreamManager({
 
         const startCanvasStreaming = async () => {
             try {
-                const baseUrl = process.env.NEXT_PUBLIC_SIGNALING_URL?.replace("ws", "http") || "http://localhost:3001";
-                const apiUrl = new URL("/mock/daydream/streams", baseUrl);
+                const baseUrl = "https://api.daydream.live";
+                const apiUrl = new URL("/streams", baseUrl);
                 const response = await fetch(apiUrl.toString(), {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${process.env.DAYDREAM_API_KEY}`,
+                    },
                     body: JSON.stringify({ type: "combined" }),
-                    credentials: "include", // Include credentials for CORS
+                    credentials: "include",
                 });
 
                 if (!response.ok) {
                     throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-                }
-
-                const contentType = response.headers.get("content-type");
-                if (!contentType || !contentType.includes("application/json")) {
-                    const text = await response.text();
-                    throw new Error(`Expected JSON, received ${contentType}: ${text.slice(0, 50)}...`);
                 }
 
                 const data = await response.json();
@@ -105,7 +102,7 @@ export default function StreamManager({
                     if (!isCancelled) toast.error("Streaming connection closed");
                 };
 
-                setCanvasPlaybackUrl(`https://mock-playback.daydream.live/${data.output_playback_id}`);
+                setCanvasPlaybackUrl(data.playback_url);
             } catch (error) {
                 if (!isCancelled) {
                     console.error("Streaming error:", error);
@@ -142,24 +139,25 @@ export default function StreamManager({
 
         const startWebcamStreaming = async () => {
             if (!webcamStream) return;
+            if (!webcamPrompt) {
+                toast.error("Enter a webcam prompt first");
+                return;
+            }
             try {
-                const baseUrl = process.env.NEXT_PUBLIC_SIGNALING_URL?.replace("ws", "http") || "http://localhost:3001";
-                const apiUrl = new URL("/mock/daydream/streams", baseUrl);
+                const baseUrl = "https://api.daydream.live";
+                const apiUrl = new URL("/streams", baseUrl);
                 const response = await fetch(apiUrl.toString(), {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: webcamPrompt, type: "webcam" }),
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${process.env.DAYDREAM_API_KEY}`,
+                    },
+                    body: JSON.stringify({ type: "webcam", prompt: webcamPrompt }),
                     credentials: "include",
                 });
 
                 if (!response.ok) {
                     throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-                }
-
-                const contentType = response.headers.get("content-type");
-                if (!contentType || !contentType.includes("application/json")) {
-                    const text = await response.text();
-                    throw new Error(`Expected JSON, received ${contentType}: ${text.slice(0, 50)}...`);
                 }
 
                 const data = await response.json();
@@ -190,7 +188,7 @@ export default function StreamManager({
                     if (!isCancelled) toast.error("Webcam streaming connection closed");
                 };
 
-                setWebcamPlaybackUrl(`https://mock-playback.daydream.live/${data.output_playback_id}`);
+                setWebcamPlaybackUrl(data.playback_url);
                 setIsEnhanced(true);
             } catch (error) {
                 if (!isCancelled) {

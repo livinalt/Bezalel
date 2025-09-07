@@ -7,10 +7,10 @@ import io, { Socket } from "socket.io-client";
 import { toast } from "sonner";
 import { v4 as uuid } from "uuid";
 import ThemeToggle from "@/components/ThemeToggle";
-import Toolbar from "@/components/Toolbar";
+// import Toolbar from "@/components/Toolbar";
 import VideoFeed from "@/components/VideoFeed";
 import StreamManager from "@/components/StreamManager";
-import PageSidebar from "@/components/PageSidebar";
+// import PageSidebar from "@/components/PageSidebar";
 import Canvas from "@/components/Canvas";
 import LayersPanel from "@/components/LayersPanel";
 import { PageData } from "@/components/types";
@@ -215,51 +215,8 @@ export default function Board() {
                 </div>
             </header>
 
-            <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-[1060px] px-2">
-                <Toolbar
-                    isDrawingMode={isDrawingMode}
-                    setIsDrawingMode={setIsDrawingMode}
-                    activeTool={activeTool}
-                    setActiveTool={setActiveTool}
-                    brushColor={brushColor}
-                    setBrushColor={setBrushColor}
-                    brushWidth={brushWidth}
-                    setBrushWidth={setBrushWidth}
-                    brushOpacity={brushOpacity}
-                    setBrushOpacity={setBrushOpacity}
-                    brushType={brushType}
-                    setBrushType={setBrushType}
-                    handleUndo={handleUndo}
-                    handleRedo={handleRedo}
-                    canvasComponentRef={editorRef}
-                    aiPrompt={aiPrompt}
-                    setAiPrompt={setAiPrompt}
-                    webcamPrompt={webcamPrompt}
-                    setWebcamPrompt={setWebcamPrompt}
-                    showGrid={showGrid}
-                    setShowGrid={setShowGrid}
-                    showRulers={showRulers}
-                    setShowRulers={setShowRulers}
-                    isStreaming={isStreaming}
-                    setIsStreaming={setIsStreaming}
-                    useWebcam={useWebcam}
-                    setUseWebcam={setUseWebcam}
-                    enhanceWebcam={enhanceWebcam}
-                    setEnhanceWebcam={setEnhanceWebcam}
-                    saveCanvasState={saveCanvasState}
-                />
-            </div>
-
             <main className="absolute top-14 bottom-0 left-0 right-48 flex">
-                {/* <PageSidebar
-                    pages={pages}
-                    activePageId={activePageId}
-                    onSelectPage={setActivePageId}
-                    onAddPage={handleAddPage}
-                    onRenamePage={handleRenamePage}
-                    onDeletePage={handleDeletePage}
-                /> */}
-
+                
                 <div className="flex-1 relative">
                     <Canvas
                         roomId={roomId}
