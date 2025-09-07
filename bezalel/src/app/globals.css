@@ -121,11 +121,9 @@
   }
 }
 
-/* toolbar */
-/* .no-scrollbar::-webkit-scrollbar {
-  display: none;
+.tl-container {
+  z-index: 0 !important;
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-} */
+.tl-spinner {
+  display: none !important; /* hides the loader */
+}

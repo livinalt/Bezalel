@@ -1,28 +1,21 @@
-
 "use client";
 
-import { Dispatch, RefObject, SetStateAction, Fragment } from "react";
+import { Dispatch, SetStateAction, Fragment } from "react";
 import {
-    Pencil,
-    Hand,
     Undo2,
     Redo2,
     Grid,
     ZoomIn,
     ZoomOut,
     Trash2,
-    Square,
-    Minus,
     Download,
-    MousePointer,
-    Eraser,
-    Palette,
-    ChevronDown,
-    Circle,
-    Triangle,
     Sparkles,
+    Ruler,
+    ChevronDown,
 } from "lucide-react";
 import { Menu, Transition } from "@headlessui/react";
+import { TLEditor } from "@tldraw/tldraw";
+import { toast } from "sonner";
 
 interface DrawingControlsProps {
     isDrawingMode: boolean;
@@ -35,108 +28,79 @@ interface DrawingControlsProps {
     setBrushWidth: Dispatch<SetStateAction<number>>;
     brushOpacity: number;
     setBrushOpacity: Dispatch<SetStateAction<number>>;
+    brushType: string;
+    setBrushType: Dispatch<SetStateAction<string>>;
     handleUndo: () => void;
     handleRedo: () => void;
-    canvasRef: RefObject<any>;
+    canvasComponentRef: React.RefObject<TLEditor>;
     aiPrompt: string;
     setAiPrompt: Dispatch<SetStateAction<string>>;
     showGrid: boolean;
     setShowGrid: Dispatch<SetStateAction<boolean>>;
+    showRulers: boolean;
+    setShowRulers: Dispatch<SetStateAction<boolean>>;
+    saveCanvasState: () => void;
 }
 
 export default function DrawingControls({
-    isDrawingMode,
-    setIsDrawingMode,
-    activeTool,
-    setActiveTool,
-    brushColor,
-    setBrushColor,
-    brushWidth,
-    setBrushWidth,
-    brushOpacity,
-    setBrushOpacity,
     handleUndo,
     handleRedo,
-    canvasRef,
+    canvasComponentRef,
     aiPrompt,
     setAiPrompt,
     showGrid,
     setShowGrid,
+    showRulers,
+    setShowRulers,
+    saveCanvasState,
 }: DrawingControlsProps) {
-    const colorPalette = [
-        "#FF0000",
-        "#00FF00",
-        "#0000FF",
-        "#FFFF00",
-        "#FF00FF",
-        "#00FFFF",
-        "#000000",
-        "#FFFFFF",
-    ];
-
-    const updateBrush = (color?: string, width?: number) => {
-        const canvas = canvasRef.current;
-        if (canvas && canvas.isDrawingMode && canvas.freeDrawingBrush) {
-            if (color !== undefined) {
-                canvas.freeDrawingBrush.color = activeTool === "eraser" ? "transparent" : color;
-                canvas.freeDrawingBrush.globalCompositeOperation = activeTool === "eraser" ? "destination-out" : "source-over";
-            }
-            if (width !== undefined) {
-                canvas.freeDrawingBrush.width = width;
-            }
+    const exportCanvas = (format: "svg" | "png") => {
+        const editor = canvasComponentRef.current;
+        if (!editor) return;
+        if (format === "svg") {
+            const svg = editor.getSvgString();
+            if (!svg) return;
+            const blob = new Blob([svg], { type: "image/svg+xml" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "drawing.svg";
+            link.click();
+            URL.revokeObjectURL(url);
+        } else if (format === "png") {
+            const canvas = editor.getContainer().querySelector("canvas");
+            if (!canvas) return;
+            canvas.toBlob((blob) => {
+                if (!blob) return;
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = "drawing.png";
+                link.click();
+                URL.revokeObjectURL(url);
+            }, "image/png");
         }
     };
 
     return (
         <div className="flex items-center gap-2 overflow-visible">
-            <ToolbarButton
-                label="Select (V)"
-                active={activeTool === "select"}
-                onClick={() => {
-                    setActiveTool("select");
-                    setIsDrawingMode(false);
-                    if (canvasRef.current) {
-                        canvasRef.current.isDrawingMode = false;
-                        canvasRef.current.selection = true;
-                    }
-                }}
-            >
-                <MousePointer className="w-4 h-4" />
+            <ToolbarButton label="Undo (Ctrl+Z)" onClick={handleUndo}>
+                <Undo2 className="w-4 h-4" />
+            </ToolbarButton>
+            <ToolbarButton label="Redo (Ctrl+Shift+Z)" onClick={handleRedo}>
+                <Redo2 className="w-4 h-4" />
             </ToolbarButton>
 
             <ToolbarButton
-                label="Pencil (P)"
-                active={activeTool === "pencil"}
-                onClick={() => {
-                    setActiveTool("pencil");
-                    setIsDrawingMode(true);
-                    if (canvasRef.current) {
-                        canvasRef.current.isDrawingMode = true;
-                        updateBrush(brushColor, brushWidth);
-                    }
-                }}
+                label="Delete (Del)"
+                onClick={() => canvasComponentRef.current?.deleteShapes(canvasComponentRef.current.getSelectedShapeIds())}
             >
-                <Pencil className="w-4 h-4" />
-            </ToolbarButton>
-
-            <ToolbarButton
-                label="Eraser (E)"
-                active={activeTool === "eraser"}
-                onClick={() => {
-                    setActiveTool("eraser");
-                    setIsDrawingMode(true);
-                    if (canvasRef.current) {
-                        canvasRef.current.isDrawingMode = true;
-                        updateBrush("transparent", brushWidth);
-                    }
-                }}
-            >
-                <Eraser className="w-4 h-4" />
+                <Trash2 className="w-4 h-4 text-red-600" />
             </ToolbarButton>
 
             <Menu as="div" className="relative inline-block text-left">
                 <Menu.Button className="toolbar-btn flex items-center">
-                    <Square className="w-4 h-4" />
+                    <Download className="w-4 h-4" />
                     <ChevronDown className="w-3 h-3 ml-1" />
                 </Menu.Button>
                 <Transition
@@ -149,110 +113,40 @@ export default function DrawingControls({
                     leaveTo="transform opacity-0 scale-95"
                 >
                     <Menu.Items className="absolute left-0 bottom-full mb-2 w-32 rounded-md bg-white dark:bg-zinc-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-[10000] p-1">
-                        <ShapeMenuItem
-                            icon={<Square className="w-4 h-4" />}
-                            label="Rectangle"
-                            onClick={() => {
-                                setActiveTool("rectangle");
-                                setIsDrawingMode(false);
-                            }}
-                        />
-                        <ShapeMenuItem
-                            icon={<Minus className="w-4 h-4" />}
-                            label="Line"
-                            onClick={() => {
-                                setActiveTool("line");
-                                setIsDrawingMode(false);
-                            }}
-                        />
-                        <ShapeMenuItem
-                            icon={<Circle className="w-4 h-4" />}
-                            label="Circle"
-                            onClick={() => {
-                                setActiveTool("circle");
-                                setIsDrawingMode(false);
-                            }}
-                        />
-                        <ShapeMenuItem
-                            icon={<Triangle className="w-4 h-4" />}
-                            label="Triangle"
-                            onClick={() => {
-                                setActiveTool("triangle");
-                                setIsDrawingMode(false);
-                            }}
-                        />
-                        <ShapeMenuItem
-                            icon={<Minus className="w-4 h-4 rotate-45" />}
-                            label="Arrow"
-                            onClick={() => {
-                                setActiveTool("arrow");
-                                setIsDrawingMode(false);
-                            }}
-                        />
+                        <Menu.Item>
+                            {({ active }) => (
+                                <button
+                                    onClick={() => exportCanvas("svg")}
+                                    className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} flex w-full items-center gap-2 px-2 py-1 text-sm rounded`}
+                                >
+                                    Export SVG
+                                </button>
+                            )}
+                        </Menu.Item>
+                        <Menu.Item>
+                            {({ active }) => (
+                                <button
+                                    onClick={() => exportCanvas("png")}
+                                    className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} flex w-full items-center gap-2 px-2 py-1 text-sm rounded`}
+                                >
+                                    Export PNG
+                                </button>
+                            )}
+                        </Menu.Item>
                     </Menu.Items>
                 </Transition>
             </Menu>
 
-            <Menu as="div" className="relative inline-block text-left">
-                <Menu.Button className="toolbar-btn flex items-center">
-                    <Palette className="w-4 h-4" />
-                    <ChevronDown className="w-3 h-3 ml-1" />
-                </Menu.Button>
-                <Transition
-                    as={Fragment}
-                    enter="transition ease-out duration-100"
-                    enterFrom="transform opacity-0 scale-95"
-                    enterTo="transform opacity-100 scale-100"
-                    leave="transition ease-in duration-75"
-                    leaveFrom="transform opacity-100 scale-100"
-                    leaveTo="transform opacity-0 scale-95"
-                >
-                    <Menu.Items
-                        className="absolute left-0 bottom-full mb-2 w-52 rounded-md bg-white dark:bg-zinc-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-[10000] p-2 flex flex-wrap gap-2"
-                    >
-                        {colorPalette.map((color) => (
-                            <Menu.Item key={color}>
-                                {({ active }) => (
-                                    <button
-                                        onClick={() => {
-                                            setBrushColor(color);
-                                            updateBrush(color);
-                                        }}
-                                        className={`w-6 h-6 rounded ${active ? "ring-2 ring-blue-500" : ""}`}
-                                        style={{ backgroundColor: color }}
-                                    />
-                                )}
-                            </Menu.Item>
-                        ))}
-                    </Menu.Items>
-                </Transition>
-            </Menu>
-
-            <ToolbarButton label="Undo (Ctrl+Z)" onClick={handleUndo}>
-                <Undo2 className="w-4 h-4" />
-            </ToolbarButton>
-            <ToolbarButton label="Redo (Ctrl+Shift+Z)" onClick={handleRedo}>
-                <Redo2 className="w-4 h-4" />
-            </ToolbarButton>
-
             <ToolbarButton
-                label="Delete (Del)"
-                onClick={() => canvasRef.current?.deleteSelected()}
+                label="Zoom Out (-)"
+                onClick={() => canvasComponentRef.current?.zoomOut()}
             >
-                <Trash2 className="w-4 h-4 text-red-600" />
-            </ToolbarButton>
-
-            <ToolbarButton
-                label="Export (Ctrl+E)"
-                onClick={() => canvasRef.current?.exportCanvas()}
-            >
-                <Download className="w-4 h-4" />
-            </ToolbarButton>
-
-            <ToolbarButton label="Zoom Out (-)" onClick={() => canvasRef.current?.zoomOut()}>
                 <ZoomOut className="w-4 h-4" />
             </ToolbarButton>
-            <ToolbarButton label="Zoom In (+)" onClick={() => canvasRef.current?.zoomIn()}>
+            <ToolbarButton
+                label="Zoom In (+)"
+                onClick={() => canvasComponentRef.current?.zoomIn()}
+            >
                 <ZoomIn className="w-4 h-4" />
             </ToolbarButton>
 
@@ -265,7 +159,38 @@ export default function DrawingControls({
             />
             <button
                 title="Enhance Selected Objects"
-                onClick={() => canvasRef.current?.applyEnhanceToSelected(aiPrompt)}
+                onClick={async () => {
+                    const editor = canvasComponentRef.current;
+                    if (!editor || !aiPrompt) return;
+                    const selectedShapes = editor.getSelectedShapes();
+                    if (selectedShapes.length === 0) return;
+                    try {
+                        const response = await fetch("/mock/daydream/streams", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                objects: selectedShapes.map((shape) => ({
+                                    id: shape.id,
+                                    type: shape.type,
+                                    props: shape.props,
+                                })),
+                                prompt: aiPrompt,
+                            }),
+                        });
+                        const result = await response.json();
+                        editor.updateShapes(
+                            result.objects.map((obj: any) => ({
+                                id: obj.id,
+                                type: obj.type,
+                                props: { ...obj.props, fill: obj.fill || obj.props.fill },
+                            }))
+                        );
+                        saveCanvasState();
+                    } catch (error) {
+                        console.error("DaydreamAPI error:", error);
+                        toast.error("Failed to enhance objects");
+                    }
+                }}
                 className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-green-50"
             >
                 <Sparkles className="w-4 h-4 text-green-600" />
@@ -274,9 +199,20 @@ export default function DrawingControls({
             <ToolbarButton
                 label="Toggle Grid (G)"
                 active={showGrid}
-                onClick={() => setShowGrid((s) => !s)}
+                onClick={() => {
+                    setShowGrid((s) => !s);
+                    canvasComponentRef.current?.updateInstanceState({ isGridMode: !showGrid });
+                }}
             >
                 <Grid className="w-4 h-4" />
+            </ToolbarButton>
+
+            <ToolbarButton
+                label="Toggle Rulers (R)"
+                active={showRulers}
+                onClick={() => setShowRulers((s) => !s)}
+            >
+                <Ruler className="w-4 h-4" />
             </ToolbarButton>
         </div>
     );
@@ -297,36 +233,9 @@ function ToolbarButton({
         <button
             onClick={onClick}
             title={label}
-            className={`toolbar-btn w-8 h-8 flex items-center justify-center rounded-md transition ${active
-                ? "bg-gray-200 dark:bg-zinc-700"
-                : "hover:bg-gray-100 dark:hover:bg-zinc-800"
-                }`}
+            className={`toolbar-btn w-8 h-8 flex items-center justify-center rounded-md transition ${active ? "bg-gray-200 dark:bg-zinc-700" : "hover:bg-gray-100 dark:hover:bg-zinc-800"}`}
         >
             {children}
         </button>
-    );
-}
-
-function ShapeMenuItem({
-    icon,
-    label,
-    onClick,
-}: {
-    icon: React.ReactNode;
-    label: string;
-    onClick: () => void;
-}) {
-    return (
-        <Menu.Item>
-            {({ active }) => (
-                <button
-                    onClick={onClick}
-                    className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                        } flex w-full items-center gap-2 px-2 py-1 text-sm rounded`}
-                >
-                    {icon} {label}
-                </button>
-            )}
-        </Menu.Item>
     );
 }

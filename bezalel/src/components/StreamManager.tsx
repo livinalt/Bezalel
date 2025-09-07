@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef } from "react";
 import { Socket } from "socket.io-client";
-import { Canvas as FabricJSCanvas } from "fabric";
 import { toast } from "sonner";
 
 interface StreamManagerProps {
@@ -13,126 +12,81 @@ interface StreamManagerProps {
     webcamPrompt: string;
     roomId: string | string[];
     socketRef: React.MutableRefObject<Socket | null>;
-    canvasRef: React.MutableRefObject<FabricJSCanvas | null>;
+    canvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
     setStreamId: (id: string | null) => void;
     webcamStream: MediaStream | null;
-    setWebcamPlaybackUrl: (url: string | null) => void;
     setCanvasPlaybackUrl: (url: string | null) => void;
+    setWebcamPlaybackUrl: (url: string | null) => void;
     setIsEnhanced: (value: boolean) => void;
+    setIsStreaming: (value: boolean) => void;
 }
 
-const StreamManager = forwardRef(function StreamManager(
-    {
-        isStreaming,
-        useWebcam,
-        enhanceWebcam,
-        aiPrompt,
-        webcamPrompt,
-        roomId,
-        socketRef,
-        canvasRef,
-        setStreamId,
-        webcamStream,
-        setWebcamPlaybackUrl,
-        setCanvasPlaybackUrl,
-        setIsEnhanced,
-    }: StreamManagerProps,
-    ref
-) {
+export default function StreamManager({
+    isStreaming,
+    useWebcam,
+    enhanceWebcam,
+    aiPrompt,
+    webcamPrompt,
+    roomId,
+    socketRef,
+    canvasRef,
+    setStreamId,
+    webcamStream,
+    setCanvasPlaybackUrl,
+    setWebcamPlaybackUrl,
+    setIsEnhanced,
+    setIsStreaming,
+}: StreamManagerProps) {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const canvasStreamRef = useRef<MediaStream | null>(null);
-
-    useImperativeHandle(ref, () => ({
-        handleEnhance: async () => {
-            if (!webcamStream || !webcamPrompt) return;
-            try {
-                const response = await fetch("/mock/daydream/streams", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: webcamPrompt, type: "webcam" }),
-                });
-                const data = await response.json();
-                setWebcamPlaybackUrl(`https://mock-playback.daydream.live/${data.output_playback_id}`);
-                setIsEnhanced(true);
-                toast.success("Webcam enhancement started");
-            } catch (error) {
-                console.error("Webcam enhancement error:", error);
-                toast.error("Failed to enhance webcam");
-            }
-        },
-        handleCanvasEnhance: async () => {
-            if (!canvasRef.current || !aiPrompt) return;
-            try {
-                const canvasData = canvasRef.current.toDataURL({ format: "png" });
-                const response = await fetch("/mock/daydream/streams", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: aiPrompt, image: canvasData, type: "canvas" }),
-                });
-                const data = await response.json();
-                setCanvasPlaybackUrl(`https://mock-playback.daydream.live/${data.output_playback_id}`);
-                toast.success("Canvas enhancement started");
-            } catch (error) {
-                console.error("Canvas enhancement error:", error);
-                toast.error("Failed to enhance canvas");
-            }
-        },
-    }));
+    const webcamRecorderRef = useRef<MediaRecorder | null>(null);
+    const webcamWsRef = useRef<WebSocket | null>(null);
 
     useEffect(() => {
-        if (!isStreaming) {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-                mediaRecorderRef.current.stop();
-            }
-            if (wsRef.current) {
-                wsRef.current.close();
-            }
-            setStreamId(null);
-            setWebcamPlaybackUrl(null);
-            setCanvasPlaybackUrl(null);
-            setIsEnhanced(false);
-            return;
-        }
+        let isCancelled = false;
 
-        const startStreaming = async () => {
+        const startCanvasStreaming = async () => {
             try {
-                const response = await fetch("/mock/daydream/streams", {
+                const baseUrl = process.env.NEXT_PUBLIC_SIGNALING_URL?.replace("ws", "http") || "http://localhost:3001";
+                const apiUrl = new URL("/mock/daydream/streams", baseUrl);
+                const response = await fetch(apiUrl.toString(), {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ type: "combined" }),
+                    credentials: "include", // Include credentials for CORS
                 });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+                }
+
+                const contentType = response.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    const text = await response.text();
+                    throw new Error(`Expected JSON, received ${contentType}: ${text.slice(0, 50)}...`);
+                }
+
                 const data = await response.json();
+                if (isCancelled) return;
+
                 setStreamId(data.id);
 
                 const ws = new WebSocket(data.whip_url);
                 wsRef.current = ws;
 
-                ws.onopen = () => {
-                    console.log("WebSocket connected for streaming");
-                };
-
-                ws.onclose = () => {
-                    console.log("WebSocket closed");
-                    setStreamId(null);
-                };
-
-                ws.onerror = (error) => {
-                    console.error("WebSocket error:", error);
-                    toast.error("Streaming error");
-                };
-
                 const combinedStream = new MediaStream();
                 if (canvasRef.current) {
-                    canvasStreamRef.current = canvasRef.current.getCanvasElement().captureStream(30);
-                    canvasStreamRef.current.getVideoTracks().forEach((track) => combinedStream.addTrack(track));
+                    canvasStreamRef.current = canvasRef.current.captureStream(30);
+                    canvasStreamRef.current.getVideoTracks().forEach((t) => combinedStream.addTrack(t));
                 }
-                if (webcamStream) {
-                    webcamStream.getTracks().forEach((track) => combinedStream.addTrack(track));
+                if (useWebcam && !enhanceWebcam && webcamStream) {
+                    webcamStream.getTracks().forEach((t) => combinedStream.addTrack(t));
                 }
 
                 mediaRecorderRef.current = new MediaRecorder(combinedStream, {
                     mimeType: "video/webm;codecs=vp8,opus",
+                    videoBitsPerSecond: 2500000,
                 });
 
                 mediaRecorderRef.current.ondataavailable = (event) => {
@@ -141,50 +95,130 @@ const StreamManager = forwardRef(function StreamManager(
                     }
                 };
 
-                mediaRecorderRef.current.onstop = () => {
-                    console.log("MediaRecorder stopped");
-                    if (canvasStreamRef.current) {
-                        canvasStreamRef.current.getTracks().forEach((track) => track.stop());
-                    }
-                };
-
                 mediaRecorderRef.current.start(1000);
 
-                socketRef.current?.emit("playbackInfo", {
-                    canvasPlaybackUrl: `https://mock-playback.daydream.live/${data.output_playback_id}/canvas`,
-                    webcamPlaybackUrl: useWebcam ? `https://mock-playback.daydream.live/${data.output_playback_id}/webcam` : null,
-                    roomId,
-                });
+                ws.onopen = () => {
+                    if (!isCancelled) toast.success("Streaming started");
+                };
 
-                if (enhanceWebcam && webcamPrompt) {
-                    const enhanceResponse = await fetch("/mock/daydream/streams", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ prompt: webcamPrompt, type: "webcam" }),
-                    });
-                    const enhanceData = await enhanceResponse.json();
-                    setWebcamPlaybackUrl(`https://mock-playback.daydream.live/${enhanceData.output_playback_id}`);
-                    setIsEnhanced(true);
-                }
+                ws.onclose = () => {
+                    if (!isCancelled) toast.error("Streaming connection closed");
+                };
+
+                setCanvasPlaybackUrl(`https://mock-playback.daydream.live/${data.output_playback_id}`);
             } catch (error) {
-                console.error("Streaming setup error:", error);
-                toast.error("Failed to start streaming");
+                if (!isCancelled) {
+                    console.error("Streaming error:", error);
+                    toast.error(`Failed to start streaming: ${error.message}`);
+                    setIsStreaming(false);
+                    setStreamId(null);
+                    setCanvasPlaybackUrl(null);
+                }
             }
         };
 
-        startStreaming();
+        if (isStreaming) {
+            startCanvasStreaming();
+        }
 
         return () => {
+            isCancelled = true;
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
                 mediaRecorderRef.current.stop();
             }
             if (wsRef.current) {
                 wsRef.current.close();
             }
+            if (canvasStreamRef.current) {
+                canvasStreamRef.current.getTracks().forEach((t) => t.stop());
+            }
+            setStreamId(null);
+            setCanvasPlaybackUrl(null);
         };
-    }, [isStreaming, useWebcam, enhanceWebcam, webcamPrompt, roomId, socketRef, canvasRef, setStreamId, webcamStream, setWebcamPlaybackUrl, setCanvasPlaybackUrl, setIsEnhanced]);
+    }, [isStreaming, useWebcam, enhanceWebcam, webcamStream, canvasRef, setStreamId, setCanvasPlaybackUrl, setIsStreaming]);
+
+    useEffect(() => {
+        let isCancelled = false;
+
+        const startWebcamStreaming = async () => {
+            if (!webcamStream) return;
+            try {
+                const baseUrl = process.env.NEXT_PUBLIC_SIGNALING_URL?.replace("ws", "http") || "http://localhost:3001";
+                const apiUrl = new URL("/mock/daydream/streams", baseUrl);
+                const response = await fetch(apiUrl.toString(), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt: webcamPrompt, type: "webcam" }),
+                    credentials: "include",
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+                }
+
+                const contentType = response.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    const text = await response.text();
+                    throw new Error(`Expected JSON, received ${contentType}: ${text.slice(0, 50)}...`);
+                }
+
+                const data = await response.json();
+                if (isCancelled) return;
+
+                const ws = new WebSocket(data.whip_url);
+                webcamWsRef.current = ws;
+
+                const recorder = new MediaRecorder(webcamStream, {
+                    mimeType: "video/webm;codecs=vp8,opus",
+                    videoBitsPerSecond: 2500000,
+                });
+
+                recorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+                        ws.send(event.data);
+                    }
+                };
+
+                recorder.start(1000);
+                webcamRecorderRef.current = recorder;
+
+                ws.onopen = () => {
+                    if (!isCancelled) toast.success("Webcam enhancement started");
+                };
+
+                ws.onclose = () => {
+                    if (!isCancelled) toast.error("Webcam streaming connection closed");
+                };
+
+                setWebcamPlaybackUrl(`https://mock-playback.daydream.live/${data.output_playback_id}`);
+                setIsEnhanced(true);
+            } catch (error) {
+                if (!isCancelled) {
+                    console.error("Webcam enhancement error:", error);
+                    toast.error(`Failed to enhance webcam: ${error.message}`);
+                    setWebcamPlaybackUrl(null);
+                    setIsEnhanced(false);
+                    setIsStreaming(false);
+                }
+            }
+        };
+
+        if (isStreaming && useWebcam && enhanceWebcam) {
+            startWebcamStreaming();
+        }
+
+        return () => {
+            isCancelled = true;
+            if (webcamRecorderRef.current && webcamRecorderRef.current.state !== "inactive") {
+                webcamRecorderRef.current.stop();
+            }
+            if (webcamWsRef.current) {
+                webcamWsRef.current.close();
+            }
+            setWebcamPlaybackUrl(null);
+            setIsEnhanced(false);
+        };
+    }, [isStreaming, useWebcam, enhanceWebcam, webcamPrompt, webcamStream, setWebcamPlaybackUrl, setIsEnhanced, setIsStreaming]);
 
     return null;
-});
-
-export default StreamManager;
+}

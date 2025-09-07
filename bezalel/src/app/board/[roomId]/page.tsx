@@ -1,57 +1,71 @@
+
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { useParams } from "next/navigation";
 import io, { Socket } from "socket.io-client";
-import Canvas from "@/components/Canvas";
-import VideoFeed from "@/components/VideoFeed";
-import Toolbar from "@/components/Toolbar";
-import StreamManager from "@/components/StreamManager";
-import PageSidebar from "@/components/PageSidebar";
-import { Canvas as FabricJSCanvas, Path as FabricPath } from "fabric";
 import { toast } from "sonner";
 import { v4 as uuid } from "uuid";
 import ThemeToggle from "@/components/ThemeToggle";
-import { CanvasData, PageData } from "../../../components/types";
+import Toolbar from "@/components/Toolbar";
+import VideoFeed from "@/components/VideoFeed";
+import StreamManager from "@/components/StreamManager";
+import PageSidebar from "@/components/PageSidebar";
+import Canvas from "@/components/Canvas";
+import LayersPanel from "@/components/LayersPanel";
+import { PageData } from "@/components/types";
+import { Rnd } from "react-rnd";
+
+const MemoizedVideoFeed = memo(VideoFeed);
 
 export default function Board() {
     const { roomId } = useParams();
-
-    const canvasRef = useRef<FabricJSCanvas | null>(null);
-    const canvasComponentRef = useRef<any>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const editorRef = useRef<Editor | null>(null);
     const socketRef = useRef<Socket | null>(null);
-    const streamManagerRef = useRef<{ handleEnhance: () => Promise<void>; handleCanvasEnhance: () => Promise<void> } | null>(null);
     const lastSavedState = useRef<string | null>(null);
 
     const [isStreaming, setIsStreaming] = useState(false);
-    const [useWebcam, setUseWebcam] = useState(false);
+    const [useWebcam, setUseWebcam] = useState(true);
     const [enhanceWebcam, setEnhanceWebcam] = useState(false);
     const [viewerCount, setViewerCount] = useState(0);
     const [aiPrompt, setAiPrompt] = useState("");
     const [webcamPrompt, setWebcamPrompt] = useState("");
     const [isDrawingMode, setIsDrawingMode] = useState(true);
-    const [activeTool, setActiveTool] = useState("pencil"); // Added activeTool state
+    const [activeTool, setActiveTool] = useState("draw");
     const [brushColor, setBrushColor] = useState("#000000");
     const [brushWidth, setBrushWidth] = useState(3);
     const [brushOpacity, setBrushOpacity] = useState(1);
-    const [viewUrl, setViewUrl] = useState("");
+    const [brushType, setBrushType] = useState("pen");
     const [showGrid, setShowGrid] = useState(true);
+    const [showRulers, setShowRulers] = useState(false);
     const [streamId, setStreamId] = useState<string | null>(null);
     const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
     const [isMuted, setIsMuted] = useState(false);
-    const [webcamPlaybackUrl, setWebcamPlaybackUrl] = useState<string | null>(null);
     const [canvasPlaybackUrl, setCanvasPlaybackUrl] = useState<string | null>(null);
+    const [webcamPlaybackUrl, setWebcamPlaybackUrl] = useState<string | null>(null);
     const [isEnhanced, setIsEnhanced] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+    const [rndPosition, setRndPosition] = useState({ x: 20, y: 20 });
+    const [viewUrl, setViewUrl] = useState<string>(""); // Ensure viewUrl is initialized
 
     const initialPage = { id: uuid(), name: "Page 1", canvasData: null };
     const [pages, setPages] = useState<PageData[]>([initialPage]);
     const [activePageId, setActivePageId] = useState(initialPage.id);
+
+    const handleStreamChange = useCallback((stream: MediaStream | null) => {
+        setWebcamStream(stream);
+    }, []);
 
     const handleAddPage = () => {
         const newPage = { id: uuid(), name: `Page ${pages.length + 1}`, canvasData: null };
         setPages((prev) => [...prev, newPage]);
         setActivePageId(newPage.id);
         lastSavedState.current = null;
+        if (editorRef.current) {
+            editorRef.current.history.clear();
+            editorRef.current.store.clear();
+        }
     };
 
     const handleRenamePage = (id: string, newName: string) => {
@@ -77,81 +91,54 @@ export default function Board() {
         });
     };
 
-    const saveCanvasState = useCallback((canvas: FabricJSCanvas, pageId: string) => {
-        if (!canvas) return;
-        const canvasJSON = canvas.toJSON(["selectable", "id"]);
-        const canvasJSONStr = JSON.stringify(canvasJSON);
-        if (canvasJSONStr === lastSavedState.current) return;
-        setPages((prevPages) => {
-            const newPages = prevPages.map((p) =>
-                p.id === pageId ? { ...p, canvasData: canvasJSON } : p
-            );
-            lastSavedState.current = canvasJSONStr;
-            return newPages;
-        });
-    }, []);
+    const saveCanvasState = useCallback(() => {
+        if (!editorRef.current) return;
+        const snapshot = editorRef.current.store.getSnapshot();
+        const snapshotJSON = JSON.stringify(snapshot);
+        if (snapshotJSON === lastSavedState.current) return;
+        setPages((prevPages) =>
+            prevPages.map((p) => (p.id === activePageId ? { ...p, canvasData: snapshot } : p))
+        );
+        lastSavedState.current = snapshotJSON;
+    }, [activePageId]);
 
     const handleUndo = () => {
-        canvasComponentRef.current?.undo();
-        saveCanvasState(canvasRef.current!, activePageId);
+        editorRef.current?.history.undo();
+        saveCanvasState();
     };
 
     const handleRedo = () => {
-        canvasComponentRef.current?.redo();
-        saveCanvasState(canvasRef.current!, activePageId);
-    };
-
-    const handlePathCreated = (path: FabricPath) => {
-        if (canvasRef.current && path) {
-            path.set({ id: uuid() });
-            canvasRef.current.add(path);
-            saveCanvasState(canvasRef.current, activePageId);
-        }
+        editorRef.current?.history.redo();
+        saveCanvasState();
     };
 
     useEffect(() => {
-        if (!canvasRef.current) return;
-
-        const handleCanvasChange = () => {
-            saveCanvasState(canvasRef.current!, activePageId);
-        };
-
-        canvasRef.current.on("object:added", handleCanvasChange);
-        canvasRef.current.on("object:modified", handleCanvasChange);
-        canvasRef.current.on("object:removed", handleCanvasChange);
-
-        return () => {
-            canvasRef.current?.off("object:added", handleCanvasChange);
-            canvasRef.current?.off("object:modified", handleCanvasChange);
-            canvasRef.current?.off("object:removed", handleCanvasChange);
-        };
-    }, [activePageId, saveCanvasState]);
-
-    useEffect(() => {
-        if (!canvasRef.current) return;
-
+        if (!editorRef.current) return;
         const activePage = pages.find((p) => p.id === activePageId);
         if (!activePage) return;
 
-        const canvasJSONStr = JSON.stringify(activePage.canvasData);
-        if (canvasJSONStr === lastSavedState.current) return;
+        const snapshotJSON = JSON.stringify(activePage.canvasData);
+        if (snapshotJSON === lastSavedState.current) return;
 
         if (!activePage.canvasData) {
-            canvasRef.current.clear();
-            canvasRef.current.renderAll();
+            editorRef.current.history.clear();
+            editorRef.current.store.clear();
             lastSavedState.current = null;
             return;
         }
 
-        canvasRef.current.loadFromJSON(activePage.canvasData, () => {
-            canvasRef.current!.renderAll();
-            lastSavedState.current = canvasJSONStr;
-        });
+        editorRef.current.store.loadSnapshot(activePage.canvasData);
+        lastSavedState.current = snapshotJSON;
     }, [activePageId, pages]);
 
     useEffect(() => {
+        setIsMounted(true);
         if (typeof window !== "undefined") {
             setViewUrl(`${window.location.origin}/board/${roomId}/view`);
+            setRndPosition({
+                x: Math.max(20, window.innerWidth - 340),
+                y: Math.max(20, window.innerHeight - 250),
+            });
         }
     }, [roomId]);
 
@@ -159,29 +146,38 @@ export default function Board() {
         const socket = io(process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:3001");
         socketRef.current = socket;
         socket.on("connect", () => {
-            console.log("Socket connected:", socket.id);
             socket.emit("joinSession", roomId);
         });
         socket.on("viewerCount", (count: number) => {
             setViewerCount(count);
         });
-        socket.on("connect_error", (err) => {
-            console.error("Socket connection error:", err);
-            toast.error("Failed to connect to server");
+        socket.on("connect_error", () => {
+            toast.error("Failed to connect to server. Retrying...");
+            setTimeout(() => socket.connect(), 3000);
         });
         return () => {
             socket.disconnect();
         };
     }, [roomId]);
 
+    useEffect(() => {
+        let timeout: NodeJS.Timeout;
+        if (socketRef.current) {
+            timeout = setTimeout(() => {
+                socketRef.current?.emit("playbackInfo", {
+                    canvasPlaybackUrl,
+                    webcamPlaybackUrl,
+                    roomId,
+                });
+            }, 500);
+        }
+        return () => clearTimeout(timeout);
+    }, [canvasPlaybackUrl, webcamPlaybackUrl, roomId]);
+
     const copyLink = () => {
         if (!viewUrl) return;
         navigator.clipboard.writeText(viewUrl);
         toast.success("View link copied to clipboard!");
-    };
-
-    const handleCanvasEnhance = () => {
-        streamManagerRef.current?.handleCanvasEnhance();
     };
 
     if (!roomId || typeof roomId !== "string") {
@@ -190,16 +186,18 @@ export default function Board() {
 
     return (
         <div className="relative w-screen h-screen bg-neutral-100 dark:bg-zinc-900">
-            <header className="fixed top-0 left-0 right-0 h-14 z-40 flex items-center justify-between px-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-gray-200 dark:border-zinc-700">
+            <header className="fixed top-0 left-0 right-0 h-14 z-[9999] flex items-center justify-between px-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-gray-200 dark:border-zinc-700">
                 <div className="flex items-center gap-3">
-                    <h1 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Bezalel Board</h1>
+                    <h1 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        Bezalel Board
+                    </h1>
                     <span className="text-xs text-gray-500 dark:text-gray-400">/ {roomId}</span>
                     {streamId && <p className="text-xs text-gray-500">Stream ID: {streamId}</p>}
                 </div>
                 <div className="flex items-center gap-2">
                     <input
                         type="text"
-                        value={viewUrl}
+                        value={viewUrl || ""} // Fallback to empty string to prevent undefined error
                         readOnly
                         className="text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md px-2 py-1 w-64 focus:outline-none focus:ring-2 focus:ring-blue-400"
                         aria-label="view link"
@@ -217,34 +215,70 @@ export default function Board() {
                 </div>
             </header>
 
-            <main className="absolute top-14 bottom-0 left-0 right-0 flex">
-                <PageSidebar
+            <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-[1060px] px-2">
+                <Toolbar
+                    isDrawingMode={isDrawingMode}
+                    setIsDrawingMode={setIsDrawingMode}
+                    activeTool={activeTool}
+                    setActiveTool={setActiveTool}
+                    brushColor={brushColor}
+                    setBrushColor={setBrushColor}
+                    brushWidth={brushWidth}
+                    setBrushWidth={setBrushWidth}
+                    brushOpacity={brushOpacity}
+                    setBrushOpacity={setBrushOpacity}
+                    brushType={brushType}
+                    setBrushType={setBrushType}
+                    handleUndo={handleUndo}
+                    handleRedo={handleRedo}
+                    canvasComponentRef={editorRef}
+                    aiPrompt={aiPrompt}
+                    setAiPrompt={setAiPrompt}
+                    webcamPrompt={webcamPrompt}
+                    setWebcamPrompt={setWebcamPrompt}
+                    showGrid={showGrid}
+                    setShowGrid={setShowGrid}
+                    showRulers={showRulers}
+                    setShowRulers={setShowRulers}
+                    isStreaming={isStreaming}
+                    setIsStreaming={setIsStreaming}
+                    useWebcam={useWebcam}
+                    setUseWebcam={setUseWebcam}
+                    enhanceWebcam={enhanceWebcam}
+                    setEnhanceWebcam={setEnhanceWebcam}
+                    saveCanvasState={saveCanvasState}
+                />
+            </div>
+
+            <main className="absolute top-14 bottom-0 left-0 right-48 flex">
+                {/* <PageSidebar
                     pages={pages}
                     activePageId={activePageId}
                     onSelectPage={setActivePageId}
                     onAddPage={handleAddPage}
                     onRenamePage={handleRenamePage}
                     onDeletePage={handleDeletePage}
-                />
+                /> */}
 
-                <div className="flex-1 flex items-center justify-center">
+                <div className="flex-1 relative">
                     <Canvas
-                        ref={canvasComponentRef}
-                        isDrawingMode={isDrawingMode}
-                        activeTool={activeTool}
-                        setCanvasRef={(c) => (canvasRef.current = c)}
-                        onPathCreated={handlePathCreated}
-                        width={1920}
-                        height={1080}
+                        roomId={roomId}
+                        showGrid={showGrid}
+                        showRulers={showRulers}
+                        canvasRef={canvasRef}
+                        editorRef={editorRef}
                         brushColor={brushColor}
                         brushWidth={brushWidth}
                         brushOpacity={brushOpacity}
-                        showGrid={showGrid}
+                        activeTool={activeTool}
+                        isDrawingMode={isDrawingMode}
+                        brushType={brushType}
                     />
                 </div>
 
+                <LayersPanel editorRef={editorRef} />
+
                 <StreamManager
-                    ref={streamManagerRef}
                     isStreaming={isStreaming}
                     useWebcam={useWebcam}
                     enhanceWebcam={enhanceWebcam}
@@ -255,52 +289,43 @@ export default function Board() {
                     canvasRef={canvasRef}
                     setStreamId={setStreamId}
                     webcamStream={webcamStream}
-                    setWebcamPlaybackUrl={setWebcamPlaybackUrl}
                     setCanvasPlaybackUrl={setCanvasPlaybackUrl}
+                    setWebcamPlaybackUrl={setWebcamPlaybackUrl}
                     setIsEnhanced={setIsEnhanced}
-                />
-
-                <VideoFeed
-                    useWebcam={useWebcam}
-                    setUseWebcam={setUseWebcam}
-                    isMuted={isMuted}
-                    setIsMuted={setIsMuted}
-                    onStreamChange={setWebcamStream}
-                    isEnhanced={isEnhanced}
-                    enhanceWebcam={enhanceWebcam}
-                    webcamPlaybackUrl={webcamPlaybackUrl}
-                    canvasPlaybackUrl={canvasPlaybackUrl}
+                    setIsStreaming={setIsStreaming}
                 />
             </main>
 
-            <Toolbar
-                isDrawingMode={isDrawingMode}
-                setIsDrawingMode={setIsDrawingMode}
-                activeTool={activeTool}
-                setActiveTool={setActiveTool}
-                brushColor={brushColor}
-                setBrushColor={setBrushColor}
-                brushWidth={brushWidth}
-                setBrushWidth={setBrushWidth}
-                brushOpacity={brushOpacity}
-                setBrushOpacity={setBrushOpacity}
-                handleUndo={handleUndo}
-                handleRedo={handleRedo}
-                canvasComponentRef={canvasComponentRef}
-                aiPrompt={aiPrompt}
-                setAiPrompt={setAiPrompt}
-                webcamPrompt={webcamPrompt}
-                setWebcamPrompt={setWebcamPrompt}
-                showGrid={showGrid}
-                setShowGrid={setShowGrid}
-                isStreaming={isStreaming}
-                setIsStreaming={setIsStreaming}
-                handleCanvasEnhance={handleCanvasEnhance}
-                useWebcam={useWebcam}
-                setUseWebcam={setUseWebcam}
-                enhanceWebcam={enhanceWebcam}
-                setEnhanceWebcam={setEnhanceWebcam}
-            />
+
+            {isMounted && (
+                <Rnd
+                    default={{
+                        x: rndPosition.x,
+                        y: rndPosition.y,
+                        width: 320,
+                        height: 240,
+                    }}
+                    minWidth={200}
+                    minHeight={150}
+                    bounds="window"
+                    dragHandleClassName="video-drag-handle"
+                    className="z-[9999] shadow-lg rounded-lg overflow-hidden bg-black"
+                >
+                    <div className="video-drag-handle cursor-move bg-gray-800 text-white text-xs px-2 py-1">
+                        Camera
+                    </div>
+                    <MemoizedVideoFeed
+                        useWebcam={useWebcam}
+                        setUseWebcam={setUseWebcam}
+                        isMuted={isMuted}
+                        setIsMuted={setIsMuted}
+                        onStreamChange={handleStreamChange}
+                        isEnhanced={isEnhanced}
+                        enhanceWebcam={enhanceWebcam}
+                        webcamPlaybackUrl={webcamPlaybackUrl}
+                    />
+                </Rnd>
+            )}
         </div>
     );
 }

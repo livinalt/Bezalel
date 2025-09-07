@@ -1,4 +1,7 @@
-export interface ExtendedFabricCanvas extends fabric.Canvas {
-  undo?: () => void;
-  redo?: () => void;
+import { TLSnapshot } from "@tldraw/tldraw";
+
+export interface PageData {
+  id: string;
+  name: string;
+  canvasData: TLSnapshot | null;
 }

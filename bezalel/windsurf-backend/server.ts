@@ -1,145 +1,222 @@
-import express from "express";
 import { createServer } from "http";
-import { Server } from "socket.io";
-import cors from "cors";
-import { customAlphabet } from "nanoid";
+import { Server, Socket } from "socket.io";
+import express from "express";
+import type { Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { v4 as uuid } from "uuid";
+import winston from "winston";
+import rateLimit from "express-rate-limit";
+import dotenv from "dotenv";
+import path from "path";
+import { createTldrawWSServer } from "@tldraw/sync"; // Import tldraw sync server
 
-// Generate short IDs (e.g., "abcdefghij")
-const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz", 10);
+// Load environment variables from .env file
+dotenv.config({ path: path.resolve(__dirname, ".env") });
 
-interface BoardData {
-  [key: string]: unknown;
-}
-
-const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"],
-  },
+// Debug environment variables
+console.log("Loaded environment variables:", {
+  PORT: process.env.PORT,
+  CLIENT_URL: process.env.CLIENT_URL,
 });
 
-app.use(cors());
-app.use(express.json());
-
-app.get("/health", (_req, res) => {
-  res.json({ status: "OK" });
-});
-
-// Mock Daydream API
-app.post("/mock/daydream/streams", (req, res) => {
-  console.log("Mock API called with body:", req.body);
-  res.json({
-    id: "mock123",
-    whip_url: "https://mock-ingest.daydream.live",
-    output_playback_id: "mock-playback-id",
-  });
-});
-
-// Store short ID to board data mapping
-const idMapping: Map<string, { boardId: string; data: BoardData }> = new Map();
-const sessions: { [key: string]: number } = {};
-
-// API to verify board existence
-app.get("/api/board/:shortId", (req, res) => {
-  const shortId = req.params.shortId;
-  const board = idMapping.get(shortId);
-  if (board) {
-    res.json({ shortId, boardId: board.boardId });
-  } else if (
-    shortId.match(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    )
-  ) {
-    res
-      .status(410)
-      .json({ error: "Legacy UUID detected. Please create a new board." });
-  } else {
-    res.status(404).json({ error: "Board not found" });
+// Environment validation
+const requiredEnvVars = ["PORT", "CLIENT_URL"];
+requiredEnvVars.forEach((envVar) => {
+  if (!process.env[envVar]) {
+    throw new Error(`Missing required environment variable: ${envVar}`);
   }
 });
 
-// API to create a new board
-app.post("/api/board", (_req, res) => {
-  const shortId = nanoid();
-  const boardId = uuid();
-  idMapping.set(shortId, { boardId, data: {} });
-  console.log(`Created board: ${shortId} -> ${boardId}`);
-  res.json({ shortId, boardId });
+// Logger setup
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: "server.log" }),
+  ],
 });
 
-io.on("connection", (socket) => {
-  console.log(`Socket ${socket.id} connected`);
+// Express app setup
+const app = express();
+const server = createServer(app);
+const allowedOrigins = process.env.CLIENT_URL
+  ? [process.env.CLIENT_URL, "http://localhost:3000"]
+  : ["http://localhost:3000"];
 
-  socket.on(
-    "createBoard",
-    (callback: (data: { shortId: string; boardId: string }) => void) => {
-      const shortId = nanoid();
-      const boardId = uuid();
-      idMapping.set(shortId, { boardId, data: {} });
-      console.log(
-        `Socket ${socket.id} created board: ${shortId} -> ${boardId}`
-      );
-      callback({ shortId, boardId });
+// Socket.IO setup
+const io = new Server(server, {
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+// tldraw WebSocket server for sync
+const tldrawWSS = createTldrawWSServer({ server }); // Use tldraw sync server
+tldrawWSS.on("connection", (ws, req) => {
+  logger.info("tldraw WebSocket connection established", { url: req.url });
+});
+tldrawWSS.on("error", (error) => {
+  logger.error("tldraw WebSocket error", { error });
+});
+
+// Middleware
+app.use(express.json());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
+
+// Input validation schema
+const streamSchema = z.object({
+  type: z.enum(["combined", "webcam"]),
+  prompt: z.string().optional(),
+});
+
+// Types
+interface StreamResponse {
+  id: string;
+  whip_url: string;
+  output_playback_id: string;
+  playback_id: string;
+  prompt?: string;
+  type: string;
+}
+
+// Health check endpoint
+app.get("/health", (req: Request, res: Response) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Stream creation endpoint
+app.post("/mock/daydream/streams", (req: Request, res: Response) => {
+  try {
+    const { type, prompt } = streamSchema.parse(req.body);
+    const streamId = `stream-${uuid()}`;
+    const response: StreamResponse = {
+      id: streamId,
+      whip_url: `wss://mock-streaming-service/whip-${uuid()}`,
+      output_playback_id: `playback-${uuid()}`,
+      playback_id: `playback-${uuid()}`,
+      prompt,
+      type,
+    };
+    logger.info("Stream created", { streamId, type });
+    res.json(response);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.warn("Invalid input for /mock/daydream/streams", {
+        errors: error.errors,
+      });
+      res.status(400).json({ error: "Invalid input", details: error.errors });
+    } else {
+      logger.error("API error in /mock/daydream/streams", { error });
+      res.status(500).json({ error: "Internal server error" });
     }
-  );
+  }
+});
 
-  socket.on("joinSession", (shortId: string) => {
-    const board = idMapping.get(shortId);
-    if (!board) {
-      socket.emit("error", { message: "Board not found" });
-      console.log(
-        `Socket ${socket.id} tried to join non-existent board ${shortId}`
-      );
+// Error handling middleware
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  logger.error("Unexpected error", { error: err.message, stack: err.stack });
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// Socket.IO connection handling
+io.on("connection", (socket: Socket) => {
+  logger.info("New socket connection", { socketId: socket.id });
+
+  socket.on("joinSession", (roomId: string) => {
+    if (typeof roomId !== "string" || !roomId) {
+      logger.warn("Invalid roomId for joinSession", { socketId: socket.id });
+      socket.emit("error", { message: "Invalid roomId" });
       return;
     }
-    socket.join(board.boardId);
-    sessions[board.boardId] = (sessions[board.boardId] || 0) + 1;
-    console.log(
-      `Socket ${socket.id} joined board ${board.boardId} (shortId: ${shortId})`
-    );
-    io.to(board.boardId).emit("viewerCount", sessions[board.boardId]);
+
+    socket.join(roomId);
+    const room = io.sockets.adapter.rooms.get(roomId);
+    const viewerCount = room ? room.size : 0;
+    io.to(roomId).emit("viewerCount", viewerCount);
+    logger.info("Socket joined room", {
+      socketId: socket.id,
+      roomId,
+      viewerCount,
+    });
   });
 
   socket.on(
     "playbackInfo",
-    ({ playbackUrl, roomId }: { playbackUrl: string; roomId: string }) => {
-      const board = idMapping.get(roomId);
-      if (!board) {
-        socket.emit("error", { message: "Board not found" });
+    ({
+      canvasPlaybackUrl,
+      webcamPlaybackUrl,
+      roomId,
+    }: {
+      canvasPlaybackUrl: string | null;
+      webcamPlaybackUrl: string | null;
+      roomId: string;
+    }) => {
+      if (typeof roomId !== "string" || !roomId) {
+        logger.warn("Invalid roomId for playbackInfo", { socketId: socket.id });
+        socket.emit("error", { message: "Invalid roomId" });
         return;
       }
-      console.log(
-        `Broadcasting playbackInfo for board ${board.boardId} (shortId: ${roomId}): ${playbackUrl}`
-      );
-      io.to(board.boardId).emit("playbackInfo", { playbackUrl });
+
+      io.to(roomId).emit("playbackInfo", {
+        canvasPlaybackUrl,
+        webcamPlaybackUrl,
+      });
+      logger.info("Playback info sent", {
+        socketId: socket.id,
+        roomId,
+        canvasPlaybackUrl,
+        webcamPlaybackUrl,
+      });
     }
   );
 
   socket.on("disconnect", () => {
-    console.log(`Socket ${socket.id} disconnected`);
-    for (const shortId of idMapping.keys()) {
-      const board = idMapping.get(shortId);
-      if (
-        board &&
-        io.sockets.adapter.rooms.get(board.boardId)?.has(socket.id)
-      ) {
-        sessions[board.boardId] = Math.max(
-          (sessions[board.boardId] || 0) - 1,
-          0
-        );
-        io.to(board.boardId).emit("viewerCount", sessions[board.boardId]);
-        if (sessions[board.boardId] === 0) {
-          delete sessions[board.boardId];
-        }
-      }
-    }
+    logger.info("Socket disconnected", { socketId: socket.id });
+    const rooms = Array.from(socket.rooms).filter((room) => room !== socket.id);
+    rooms.forEach((roomId) => {
+      const room = io.sockets.adapter.rooms.get(roomId);
+      const viewerCount = room ? room.size : 0;
+      io.to(roomId).emit("viewerCount", viewerCount);
+      logger.info("Viewer count updated", { roomId, viewerCount });
+    });
+  });
+
+  socket.on("error", (error) => {
+    logger.error("Socket error", { socketId: socket.id, error });
   });
 });
 
-const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+// Start server
+const PORT = parseInt(process.env.PORT || "3001", 10);
+server.listen(PORT, () => {
+  logger.info(`Server running on port ${PORT}`);
+});
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  logger.info("Received SIGTERM. Performing graceful shutdown...");
+  server.close(() => {
+    logger.info("Server closed");
+    process.exit(0);
+  });
+  io.close();
+  tldrawWSS.close();
 });

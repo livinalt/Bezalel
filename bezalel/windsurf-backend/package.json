@@ -14,17 +14,28 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@tldraw/sync": "^3.15.4",
+    "@tldraw/sync-core": "^3.15.4",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
     "nanoid": "^5.1.5",
+    "redis": "^5.8.2",
     "replicate": "^1.1.0",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "uuid": "^12.0.0",
+    "winston": "^3.17.0",
+    "ws": "^8.18.3",
+    "zod": "^4.1.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
     "@types/socket.io": "^3.0.1",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.2"

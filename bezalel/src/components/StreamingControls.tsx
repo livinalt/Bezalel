@@ -1,13 +1,8 @@
-import { Dispatch, SetStateAction } from "react";
-import {
-    Sparkles,
-    Radio,
-    Square,
-    ToggleLeft,
-    ToggleRight,
-} from "lucide-react";
+"use client";
 
-// Props for StreamingControls
+import React, { Dispatch, SetStateAction, useCallback } from "react";
+import { Sparkles, Radio, Square, ToggleLeft, ToggleRight } from "lucide-react";
+
 interface StreamingControlsProps {
     webcamPrompt: string;
     setWebcamPrompt: Dispatch<SetStateAction<string>>;
@@ -19,7 +14,7 @@ interface StreamingControlsProps {
     setEnhanceWebcam: Dispatch<SetStateAction<boolean>>;
 }
 
-export default function StreamingControls({
+function StreamingControls({
     webcamPrompt,
     setWebcamPrompt,
     isStreaming,
@@ -29,9 +24,20 @@ export default function StreamingControls({
     enhanceWebcam,
     setEnhanceWebcam,
 }: StreamingControlsProps) {
+    const toggleEnhanceWebcam = useCallback(() => {
+        if (useWebcam) setEnhanceWebcam((prev) => !prev);
+    }, [useWebcam, setEnhanceWebcam]);
+
+    const toggleWebcam = useCallback(() => {
+        setUseWebcam((prev) => !prev);
+    }, [setUseWebcam]);
+
+    const toggleStreaming = useCallback(() => {
+        setIsStreaming((prev) => !prev);
+    }, [setIsStreaming]);
+
     return (
         <>
-            {/* Webcam AI Prompt */}
             <input
                 title="Webcam enhancement prompt"
                 placeholder="Webcam prompt..."
@@ -41,25 +47,27 @@ export default function StreamingControls({
             />
             <button
                 title="Enhance Webcam"
-                onClick={() => setEnhanceWebcam(!enhanceWebcam)}
+                onClick={toggleEnhanceWebcam}
                 className={`w-8 h-8 flex items-center justify-center rounded-md transition ${enhanceWebcam && useWebcam
-                    ? "bg-green-100 dark:bg-green-900"
-                    : useWebcam
-                        ? "hover:bg-green-50 dark:hover:bg-green-900"
-                        : "opacity-50 cursor-not-allowed"}`}
+                        ? "bg-green-100 dark:bg-green-900"
+                        : useWebcam
+                            ? "hover:bg-green-50 dark:hover:bg-green-900"
+                            : "opacity-50 cursor-not-allowed"
+                    }`}
             >
                 <Sparkles className="w-4 h-4 text-green-600" />
             </button>
 
-            {/* Divider */}
             <span className="h-5 w-px bg-gray-200 dark:bg-zinc-700" />
 
-            {/* Webcam Toggle */}
             <div className="flex items-center gap-2">
                 <button
                     title="Toggle Webcam"
-                    onClick={() => setUseWebcam(!useWebcam)}
-                    className={`w-8 h-8 flex items-center justify-center rounded-md transition ${useWebcam ? "bg-blue-100 dark:bg-blue-900" : "hover:bg-gray-100 dark:hover:bg-zinc-800"}`}
+                    onClick={toggleWebcam}
+                    className={`w-8 h-8 flex items-center justify-center rounded-md transition ${useWebcam
+                            ? "bg-blue-100 dark:bg-blue-900"
+                            : "hover:bg-gray-100 dark:hover:bg-zinc-800"
+                        }`}
                 >
                     {useWebcam ? (
                         <ToggleRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -70,13 +78,14 @@ export default function StreamingControls({
                 <span className="text-xs text-gray-700 dark:text-gray-200">Webcam</span>
             </div>
 
-            {/* Divider */}
             <span className="h-5 w-px bg-gray-200 dark:bg-zinc-700" />
 
-            {/* Go Live */}
             <button
-                onClick={() => setIsStreaming(!isStreaming)}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition ${isStreaming ? "bg-red-600 text-white hover:bg-red-700" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                onClick={toggleStreaming}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition ${isStreaming
+                        ? "bg-red-600 text-white hover:bg-red-700"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
             >
                 {isStreaming ? (
                     <>
@@ -91,3 +100,5 @@ export default function StreamingControls({
         </>
     );
 }
+
+export default React.memo(StreamingControls);

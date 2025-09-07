@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import io, { Socket } from "socket.io-client";
 import { toast } from "sonner";
+import Hls from "hls.js";
 
 export default function View() {
     const { roomId } = useParams();
@@ -12,6 +13,9 @@ export default function View() {
     const socketRef = useRef<Socket | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [viewerCount, setViewerCount] = useState(0);
+    const [canvasPlaybackUrl, setCanvasPlaybackUrl] = useState<string | null>(null);
+    const [webcamPlaybackUrl, setWebcamPlaybackUrl] = useState<string | null>(null);
 
     const loadPlayback = (url: string, videoEl: HTMLVideoElement | null, streamType: 'canvas' | 'webcam') => {
         if (!videoEl || !url) {
@@ -20,64 +24,49 @@ export default function View() {
             return;
         }
 
+        if (videoEl.hls) {
+            videoEl.hls.destroy();
+            videoEl.hls = null;
+        }
+
         setLoading(true);
         console.log(`Loading ${streamType} stream:`, url);
 
-        import("hls.js")
-            .then(({ default: Hls }) => {
-                if (Hls.isSupported()) {
-                    const hls = new Hls();
-                    hls.loadSource(url);
-                    hls.attachMedia(videoEl);
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        console.log(`HLS manifest parsed for ${streamType}`);
-                        videoEl.play().catch((err) => {
-                            console.error(`Playback failed for ${streamType}:`, err);
-                            setError(`Failed to play ${streamType} stream: ${err.message}`);
-                        });
-                        setLoading(false);
-                    });
-                    hls.on(Hls.Events.ERROR, (event, data) => {
-                        console.error(`HLS error for ${streamType}:`, { event, type: data.type, details: data.details, fatal: data.fatal });
-                        if (data.fatal) {
-                            setError(`Failed to load ${streamType} stream: ${data.type} - ${data.details}`);
-                        }
-                        setLoading(false);
-                    });
-                } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
-                    console.log(`Native HLS supported for ${streamType}, using direct src:`, url);
-                    videoEl.src = url;
-                    videoEl.addEventListener("loadedmetadata", () => {
-                        videoEl.play().catch((err) => {
-                            console.error(`Native playback failed for ${streamType}:`, err);
-                            setError(`Failed to play ${streamType} stream: ${err.message}`);
-                        });
-                        setLoading(false);
-                    });
-                } else {
-                    console.error(`HLS not supported by browser or hls.js for ${streamType}`);
-                    setError(`HLS not supported for ${streamType}`);
-                    setLoading(false);
-                }
-            })
-            .catch((err) => {
-                console.error(`Failed to load hls.js for ${streamType}:`, err);
-                setError(`Failed to load HLS library for ${streamType}: ${err.message}`);
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            videoEl.hls = hls;
+            hls.loadSource(url);
+            hls.attachMedia(videoEl);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                console.log(`HLS manifest parsed for ${streamType}`);
+                videoEl.play().catch((err) => {
+                    console.error(`Playback failed for ${streamType}:`, err);
+                    setError(`Failed to play ${streamType} stream: ${err.message}`);
+                });
                 setLoading(false);
-                if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
-                    console.log(`Falling back to native HLS for ${streamType}`);
-                    videoEl.src = url;
-                    videoEl.addEventListener("loadedmetadata", () => {
-                        videoEl.play().catch((err) => {
-                            console.error(`Native playback failed for ${streamType}:`, err);
-                            setError(`Failed to play ${streamType} stream: ${err.message}`);
-                        });
-                        setLoading(false);
-                    });
-                } else {
-                    setError(`No HLS support available for ${streamType}`);
-                }
             });
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                console.error(`HLS error for ${streamType}:`, { event, type: data.type, details: data.details, fatal: data.fatal });
+                if (data.fatal) {
+                    setError(`Failed to load ${streamType} stream: ${data.type} - ${data.details}`);
+                }
+                setLoading(false);
+            });
+        } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+            console.log(`Native HLS supported for ${streamType}, using direct src:`, url);
+            videoEl.src = url;
+            videoEl.addEventListener("loadedmetadata", () => {
+                videoEl.play().catch((err) => {
+                    console.error(`Native playback failed for ${streamType}:`, err);
+                    setError(`Failed to play ${streamType} stream: ${err.message}`);
+                });
+                setLoading(false);
+            });
+        } else {
+            console.error(`HLS not supported by browser or hls.js for ${streamType}`);
+            setError(`HLS not supported for ${streamType}`);
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -90,21 +79,43 @@ export default function View() {
             socket.emit("joinSession", roomId);
         });
 
-        socket.on("playbackInfo", async ({ canvasPlaybackUrl, webcamPlaybackUrl }) => {
-            console.log("Received playbackUrls:", { canvasPlaybackUrl, webcamPlaybackUrl });
+        socket.on("playbackInfo", ({ canvasPlaybackUrl: newCanvasUrl, webcamPlaybackUrl: newWebcamUrl }) => {
+            console.log("Received playbackUrls:", { newCanvasUrl, newWebcamUrl });
             setError(null);
             toast.success("Received stream URLs");
-            if (canvasPlaybackUrl) {
-                loadPlayback(canvasPlaybackUrl, canvasVideoRef.current, 'canvas');
+
+            if (newCanvasUrl !== canvasPlaybackUrl) {
+                setCanvasPlaybackUrl(newCanvasUrl);
+                if (newCanvasUrl) {
+                    loadPlayback(newCanvasUrl, canvasVideoRef.current, 'canvas');
+                } else if (canvasVideoRef.current) {
+                    if (canvasVideoRef.current.hls) {
+                        canvasVideoRef.current.hls.destroy();
+                        canvasVideoRef.current.hls = null;
+                    }
+                    canvasVideoRef.current.src = '';
+                    canvasVideoRef.current.pause();
+                }
             }
-            if (webcamPlaybackUrl) {
-                loadPlayback(webcamPlaybackUrl, webcamVideoRef.current, 'webcam');
+
+            if (newWebcamUrl !== webcamPlaybackUrl) {
+                setWebcamPlaybackUrl(newWebcamUrl);
+                if (newWebcamUrl) {
+                    loadPlayback(newWebcamUrl, webcamVideoRef.current, 'webcam');
+                } else if (webcamVideoRef.current) {
+                    if (webcamVideoRef.current.hls) {
+                        webcamVideoRef.current.hls.destroy();
+                        webcamVideoRef.current.hls = null;
+                    }
+                    webcamVideoRef.current.src = '';
+                    webcamVideoRef.current.pause();
+                }
             }
         });
 
         socket.on("viewerCount", (count: number) => {
             console.log(`Viewer count: ${count}`);
-            toast.info(`Viewer count: ${count}`);
+            setViewerCount(count);
         });
 
         socket.on("connect_error", (err) => {
@@ -116,6 +127,14 @@ export default function View() {
         return () => {
             console.log("Disconnecting socket");
             socket.disconnect();
+            if (canvasVideoRef.current?.hls) {
+                canvasVideoRef.current.hls.destroy();
+                canvasVideoRef.current.hls = null;
+            }
+            if (webcamVideoRef.current?.hls) {
+                webcamVideoRef.current.hls.destroy();
+                webcamVideoRef.current.hls = null;
+            }
         };
     }, [roomId]);
 
@@ -144,6 +163,9 @@ export default function View() {
                 controls
                 className="absolute bottom-4 right-4 w-64 h-36 rounded bg-neutral-900 object-cover"
             />
+            <div className="absolute top-4 right-4 text-white text-xs">
+                👀 {viewerCount} viewer{viewerCount === 1 ? "" : "s"}
+            </div>
         </div>
     );
 }
