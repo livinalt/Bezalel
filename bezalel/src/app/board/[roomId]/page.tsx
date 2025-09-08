@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -6,12 +7,10 @@ import Link from "next/link";
 import io, { Socket } from "socket.io-client";
 import { toast } from "sonner";
 import { Editor } from "@tldraw/tldraw";
-import { Home, Sparkles, Link as LinkIcon, Video } from "lucide-react";
+import { Home, Sparkles, Link as LinkIcon } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
-import StreamManager from "@/components/StreamManager";
 import Canvas from "@/components/Canvas";
 import LayersPanel from "@/components/LayersPanel";
-import StreamingControls from "@/components/StreamingControls";
 import { PageData } from "@/components/types";
 
 // Function to generate a short ID (e.g., abc-def-ghi)
@@ -40,23 +39,12 @@ export default function Board() {
     const initialPage = { id: generateShortId(), name: "Page 1", canvasData: null };
     const [pages, setPages] = useState<PageData[]>([initialPage]);
     const [activePageId, setActivePageId] = useState(initialPage.id);
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [viewerCount, setViewerCount] = useState(0);
     const [aiPrompt, setAiPrompt] = useState("");
-    const [isDrawingMode, setIsDrawingMode] = useState(true);
-    const [activeTool, setActiveTool] = useState("draw");
-    const [brushColor, setBrushColor] = useState("#000000");
-    const [brushWidth, setBrushWidth] = useState(3);
-    const [brushOpacity, setBrushOpacity] = useState(1);
-    const [brushType, setBrushType] = useState("pen");
     const [showGrid, setShowGrid] = useState(true);
     const [showRulers, setShowRulers] = useState(false);
-    const [streamId, setStreamId] = useState<string | null>(null);
-    const [canvasPlaybackUrl, setCanvasPlaybackUrl] = useState<string | null>(null);
     const [isMounted, setIsMounted] = useState(false);
     const [viewUrl, setViewUrl] = useState<string>("");
     const [selectedShapes, setSelectedShapes] = useState<string[]>([]);
-    const [showStreamDetails, setShowStreamDetails] = useState(false);
 
     const saveCanvasState = useCallback(() => {
         if (!editorRef.current) return;
@@ -134,7 +122,7 @@ export default function Board() {
         }
 
         const futuristicPrompt = `${aiPrompt} in a futuristic, cyberpunk style with neon accents and holographic effects`;
-        const activeStreamId = streamId || (await createDaydreamStream());
+        const activeStreamId = await createDaydreamStream();
         if (!activeStreamId) {
             toast.error("Failed to create stream for enhancement");
             return;
@@ -240,7 +228,6 @@ export default function Board() {
 
             const result = await response.json();
             console.log("Stream created:", JSON.stringify(result, null, 2));
-            setStreamId(result.id);
             return result.id;
         } catch (error: any) {
             console.error("Create stream error:", error);
@@ -371,9 +358,6 @@ export default function Board() {
         socket.on("connect", () => {
             socket.emit("joinSession", roomId);
         });
-        socket.on("viewerCount", (count: number) => {
-            setViewerCount(count);
-        });
         socket.on("connect_error", () => {
             toast.error("Failed to connect to server. Retrying...");
             setTimeout(() => socket.connect(), 3000);
@@ -404,15 +388,6 @@ export default function Board() {
                         Bezalel Board
                     </h1>
                     <span className="text-xs text-gray-500 dark:text-gray-400">/ {roomId}</span>
-                    {streamId && (
-                        <button
-                            onClick={() => setShowStreamDetails(true)}
-                            className="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition"
-                        >
-                            <Video className="w-5 h-5 inline-block mr-1" />
-                            Stream Details
-                        </button>
-                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 z-[10001]" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
@@ -424,7 +399,7 @@ export default function Board() {
                             onChange={(e) => setAiPrompt(e.target.value)}
                             className="text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 
                          bg-gray-50 dark:bg-zinc-800 border border-gray-200 
-                         dark:border-zinc-700 rounded px-2 py-1 w-40 
+                         dark:border-zinc-700 rounded px-2 py-1 w-64 
                          focus:outline-none focus:ring-1 focus:ring-green-400"
                         />
                         <button
@@ -445,13 +420,6 @@ export default function Board() {
                         >
                             <LinkIcon className="w-4 h-4 text-blue-600" />
                         </button>
-                        <StreamingControls
-                            isStreaming={isStreaming}
-                            setIsStreaming={setIsStreaming}
-                        />
-                    </div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400 px-2">
-                        👀 {viewerCount} viewer{viewerCount === 1 ? "" : "s"}
                     </div>
                     <ThemeToggle />
                 </div>
@@ -467,28 +435,10 @@ export default function Board() {
                         aiPrompt={aiPrompt}
                         setAiPrompt={setAiPrompt}
                         saveCanvasState={saveCanvasState}
-                        isStreaming={isStreaming}
-                        setIsStreaming={setIsStreaming}
-                        streamId={streamId}
-                        setStreamId={setStreamId}
-                        setCanvasPlaybackUrl={setCanvasPlaybackUrl}
                     />
                 </div>
 
                 <LayersPanel editorRef={editorRef} />
-
-                <div className="z-[10001]">
-                    <StreamManager
-                        roomId={roomId}
-                        setCanvasPlaybackUrl={setCanvasPlaybackUrl}
-                        isStreaming={isStreaming}
-                        setIsStreaming={setIsStreaming}
-                        setStreamId={setStreamId}
-                        playbackUrl={canvasPlaybackUrl || ""}
-                        showStreamDetails={showStreamDetails}
-                        setShowStreamDetails={setShowStreamDetails}
-                    />
-                </div>
             </main>
         </div>
     );

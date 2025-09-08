@@ -70,68 +70,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Input validation schema
-const streamSchema = z.object({
-  type: z.literal("canvas"),
-  prompt: z.string().optional(),
-});
-
-// Types
-interface StreamResponse {
-  id: string;
-  whip_url: string;
-  output_playback_id: string;
-  playback_id: string;
-  prompt?: string;
-  type: string;
-}
-
-// Function to generate a short ID (e.g., abc-def-ghi)
-const generateShortId = () => {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const segmentLength = 3;
-  const segments = 3;
-  let id = "";
-  for (let i = 0; i < segments; i++) {
-    for (let j = 0; j < segmentLength; j++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    if (i < segments - 1) id += "-";
-  }
-  return id;
-};
-
 // Health check endpoint
 app.get("/health", (req: Request, res: Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// Stream creation endpoint
-app.post("/mock/daydream/streams", (req: Request, res: Response) => {
-  try {
-    const { type, prompt } = streamSchema.parse(req.body);
-    const streamId = generateShortId();
-    const response: StreamResponse = {
-      id: streamId,
-      whip_url: `wss://mock-streaming-service/whip-${generateShortId()}`,
-      output_playback_id: `playback-${generateShortId()}`,
-      playback_id: `playback-${generateShortId()}`,
-      prompt,
-      type,
-    };
-    logger.info("Stream created", { streamId, type });
-    res.json(response);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      logger.warn("Invalid input for /mock/daydream/streams", {
-        errors: error.errors,
-      });
-      res.status(400).json({ error: "Invalid input", details: error.errors });
-    } else {
-      logger.error("API error in /mock/daydream/streams", { error });
-      res.status(500).json({ error: "Internal server error" });
-    }
-  }
 });
 
 // Error handling middleware
@@ -161,32 +102,6 @@ io.on("connection", (socket: Socket) => {
       viewerCount,
     });
   });
-
-  socket.on(
-    "playbackInfo",
-    ({
-      canvasPlaybackUrl,
-      roomId,
-    }: {
-      canvasPlaybackUrl: string | null;
-      roomId: string;
-    }) => {
-      if (typeof roomId !== "string" || !roomId) {
-        logger.warn("Invalid roomId for playbackInfo", { socketId: socket.id });
-        socket.emit("error", { message: "Invalid roomId" });
-        return;
-      }
-
-      io.to(roomId).emit("playbackInfo", {
-        canvasPlaybackUrl,
-      });
-      logger.info("Playback info sent", {
-        socketId: socket.id,
-        roomId,
-        canvasPlaybackUrl,
-      });
-    }
-  );
 
   socket.on("disconnect", () => {
     logger.info("Socket disconnected", { socketId: socket.id });

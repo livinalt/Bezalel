@@ -662,3 +662,43 @@
 {"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"vPg1VZdXOqyzm400AAF-","timestamp":"2025-09-08T09:28:39.183Z","viewerCount":1}
 {"canvasPlaybackUrl":"https://livepeer.studio/hls/b0caakhqa3kltnxk/index.m3u8","level":"info","message":"Playback info sent","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"vPg1VZdXOqyzm400AAF-","timestamp":"2025-09-08T09:28:47.402Z"}
 {"canvasPlaybackUrl":null,"level":"info","message":"Playback info sent","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"vPg1VZdXOqyzm400AAF-","timestamp":"2025-09-08T09:31:13.494Z"}
+{"level":"info","message":"Socket disconnected","socketId":"w1ERcB0PetsBRVvzAAF9","timestamp":"2025-09-08T10:45:26.708Z"}
+{"level":"info","message":"Socket disconnected","socketId":"vPg1VZdXOqyzm400AAF-","timestamp":"2025-09-08T10:45:26.710Z"}
+{"level":"info","message":"New socket connection","socketId":"dIZU6ikjZhcrgDDnAAGB","timestamp":"2025-09-08T11:00:19.600Z"}
+{"level":"info","message":"New socket connection","socketId":"LWm9JeZZkvkQgVcJAAGC","timestamp":"2025-09-08T11:00:19.658Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"LWm9JeZZkvkQgVcJAAGC","timestamp":"2025-09-08T11:00:22.878Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"dIZU6ikjZhcrgDDnAAGB","timestamp":"2025-09-08T11:07:20.796Z"}
+{"level":"info","message":"Socket disconnected","socketId":"LWm9JeZZkvkQgVcJAAGC","timestamp":"2025-09-08T11:07:20.819Z"}
+{"level":"info","message":"New socket connection","socketId":"XuUBkZB4N15qfAcTAAGE","timestamp":"2025-09-08T11:08:50.002Z"}
+{"level":"info","message":"New socket connection","socketId":"lA6i_fpvuIanX8DFAAGG","timestamp":"2025-09-08T11:08:51.564Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"lA6i_fpvuIanX8DFAAGG","timestamp":"2025-09-08T11:08:51.609Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"lA6i_fpvuIanX8DFAAGG","timestamp":"2025-09-08T11:09:07.898Z"}
+{"level":"info","message":"Socket disconnected","socketId":"XuUBkZB4N15qfAcTAAGE","timestamp":"2025-09-08T11:09:07.925Z"}
+{"level":"info","message":"New socket connection","socketId":"gzd-ntqZr8AXtfaOAAGJ","timestamp":"2025-09-08T11:09:09.483Z"}
+{"level":"info","message":"New socket connection","socketId":"BrioyNy3jQe6O85sAAGK","timestamp":"2025-09-08T11:09:09.497Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"BrioyNy3jQe6O85sAAGK","timestamp":"2025-09-08T11:09:09.532Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"gzd-ntqZr8AXtfaOAAGJ","timestamp":"2025-09-08T11:10:52.127Z"}
+{"level":"info","message":"Socket disconnected","socketId":"BrioyNy3jQe6O85sAAGK","timestamp":"2025-09-08T11:10:52.132Z"}
+{"level":"info","message":"New socket connection","socketId":"s9j8gbfAz-uw96L-AAGN","timestamp":"2025-09-08T11:10:54.784Z"}
+{"level":"info","message":"New socket connection","socketId":"5vK2hiDJlZS4xv5zAAGO","timestamp":"2025-09-08T11:10:54.827Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"5vK2hiDJlZS4xv5zAAGO","timestamp":"2025-09-08T11:10:55.999Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"s9j8gbfAz-uw96L-AAGN","timestamp":"2025-09-08T11:15:02.675Z"}
+{"level":"info","message":"Socket disconnected","socketId":"5vK2hiDJlZS4xv5zAAGO","timestamp":"2025-09-08T11:15:02.677Z"}
+{"level":"info","message":"New socket connection","socketId":"BAA0FDrPaU0rX5IMAAGR","timestamp":"2025-09-08T11:15:04.493Z"}
+{"level":"info","message":"New socket connection","socketId":"7GoO6bncpnb2sPDBAAGS","timestamp":"2025-09-08T11:15:04.503Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"7GoO6bncpnb2sPDBAAGS","timestamp":"2025-09-08T11:15:05.345Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"BAA0FDrPaU0rX5IMAAGR","timestamp":"2025-09-08T11:25:45.069Z"}
+{"level":"info","message":"Socket disconnected","socketId":"7GoO6bncpnb2sPDBAAGS","timestamp":"2025-09-08T11:25:45.072Z"}
+{"level":"info","message":"New socket connection","socketId":"bqaGx6wB5NYTMDumAAGV","timestamp":"2025-09-08T11:25:50.335Z"}
+{"level":"info","message":"New socket connection","socketId":"4zzWygAxN5Nr5d36AAGW","timestamp":"2025-09-08T11:25:50.351Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"4zzWygAxN5Nr5d36AAGW","timestamp":"2025-09-08T11:25:53.962Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"bqaGx6wB5NYTMDumAAGV","timestamp":"2025-09-08T12:03:35.199Z"}
+{"level":"info","message":"Socket disconnected","socketId":"4zzWygAxN5Nr5d36AAGW","timestamp":"2025-09-08T12:03:35.204Z"}
+{"level":"info","message":"New socket connection","socketId":"WT8063dvapuxeZttAAGZ","timestamp":"2025-09-08T12:03:37.142Z"}
+{"level":"info","message":"New socket connection","socketId":"QiC-GV_j3SuJh0QPAAGa","timestamp":"2025-09-08T12:03:37.153Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"QiC-GV_j3SuJh0QPAAGa","timestamp":"2025-09-08T12:03:38.071Z","viewerCount":1}
+{"level":"info","message":"Socket disconnected","socketId":"WT8063dvapuxeZttAAGZ","timestamp":"2025-09-08T12:05:58.097Z"}
+{"level":"info","message":"Socket disconnected","socketId":"QiC-GV_j3SuJh0QPAAGa","timestamp":"2025-09-08T12:05:58.100Z"}
+{"level":"info","message":"New socket connection","socketId":"oTyUL_KLOU4-NFG_AAGd","timestamp":"2025-09-08T13:58:30.526Z"}
+{"level":"info","message":"New socket connection","socketId":"eFNa39ZDMfE_UqxxAAGe","timestamp":"2025-09-08T13:58:30.543Z"}
+{"level":"info","message":"Socket joined room","roomId":"257f0e83-5f36-468c-8506-c9ded0430688","socketId":"oTyUL_KLOU4-NFG_AAGd","timestamp":"2025-09-08T13:58:30.592Z","viewerCount":1}

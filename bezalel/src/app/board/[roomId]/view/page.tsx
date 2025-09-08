@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -9,9 +10,6 @@ export default function View() {
     const { roomId } = useParams();
     const socketRef = useRef<Socket | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [viewerCount, setViewerCount] = useState(0);
-    const [canvasPlaybackUrl, setCanvasPlaybackUrl] = useState<string | null>(null);
 
     useEffect(() => {
         console.log("Viewer joining room:", roomId);
@@ -21,18 +19,6 @@ export default function View() {
         socket.on("connect", () => {
             console.log("Socket connected:", socket.id);
             socket.emit("joinSession", roomId);
-        });
-
-        socket.on("playbackInfo", ({ canvasPlaybackUrl: newCanvasUrl }) => {
-            console.log("Received canvas playbackUrl:", newCanvasUrl);
-            setError(null);
-            toast.success("Received canvas stream URL");
-            setCanvasPlaybackUrl(newCanvasUrl);
-        });
-
-        socket.on("viewerCount", (count: number) => {
-            console.log(`Viewer count: ${count}`);
-            setViewerCount(count);
         });
 
         socket.on("connect_error", (err) => {
@@ -49,32 +35,14 @@ export default function View() {
 
     return (
         <div className="relative flex w-screen h-screen items-center justify-center bg-black">
-            {loading && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
-                </div>
-            )}
             {error && (
                 <div className="absolute inset-0 flex items-center justify-center text-red-500 bg-black/80">
                     <p>{error}</p>
                 </div>
             )}
-            {canvasPlaybackUrl && (
-                <video
-                    src={canvasPlaybackUrl}
-                    autoPlay
-                    muted
-                    className="w-full h-full rounded bg-neutral-900"
-                    onLoadStart={() => setLoading(true)}
-                    onPlaying={() => setLoading(false)}
-                    onError={(e) => {
-                        setError(`Failed to play stream: ${e.currentTarget.error?.message || 'Unknown error'}`);
-                        setLoading(false);
-                    }}
-                />
-            )}
-            <div className="absolute top-4 right-4 text-white text-xs">
-                👀 {viewerCount} viewer{viewerCount === 1 ? "" : "s"}
+            <div className="text-white text-center">
+                <h2 className="text-2xl font-bold mb-4">Streaming Disabled</h2>
+                <p>Canvas streaming is no longer available. Contact the board owner for details.</p>
             </div>
         </div>
     );
