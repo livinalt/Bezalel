@@ -3,12 +3,10 @@ import { Server, Socket } from "socket.io";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { v4 as uuid } from "uuid";
 import winston from "winston";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import path from "path";
-import { createTldrawWSServer } from "@tldraw/sync"; // Import tldraw sync server
 
 // Load environment variables from .env file
 dotenv.config({ path: path.resolve(__dirname, ".env") });
@@ -62,15 +60,6 @@ const io = new Server(server, {
   },
 });
 
-// tldraw WebSocket server for sync
-const tldrawWSS = createTldrawWSServer({ server }); // Use tldraw sync server
-tldrawWSS.on("connection", (ws, req) => {
-  logger.info("tldraw WebSocket connection established", { url: req.url });
-});
-tldrawWSS.on("error", (error) => {
-  logger.error("tldraw WebSocket error", { error });
-});
-
 // Middleware
 app.use(express.json());
 
@@ -83,7 +72,7 @@ app.use(limiter);
 
 // Input validation schema
 const streamSchema = z.object({
-  type: z.enum(["combined", "webcam"]),
+  type: z.literal("canvas"),
   prompt: z.string().optional(),
 });
 
@@ -97,6 +86,21 @@ interface StreamResponse {
   type: string;
 }
 
+// Function to generate a short ID (e.g., abc-def-ghi)
+const generateShortId = () => {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const segmentLength = 3;
+  const segments = 3;
+  let id = "";
+  for (let i = 0; i < segments; i++) {
+    for (let j = 0; j < segmentLength; j++) {
+      id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    if (i < segments - 1) id += "-";
+  }
+  return id;
+};
+
 // Health check endpoint
 app.get("/health", (req: Request, res: Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
@@ -106,12 +110,12 @@ app.get("/health", (req: Request, res: Response) => {
 app.post("/mock/daydream/streams", (req: Request, res: Response) => {
   try {
     const { type, prompt } = streamSchema.parse(req.body);
-    const streamId = `stream-${uuid()}`;
+    const streamId = generateShortId();
     const response: StreamResponse = {
       id: streamId,
-      whip_url: `wss://mock-streaming-service/whip-${uuid()}`,
-      output_playback_id: `playback-${uuid()}`,
-      playback_id: `playback-${uuid()}`,
+      whip_url: `wss://mock-streaming-service/whip-${generateShortId()}`,
+      output_playback_id: `playback-${generateShortId()}`,
+      playback_id: `playback-${generateShortId()}`,
       prompt,
       type,
     };
@@ -162,11 +166,9 @@ io.on("connection", (socket: Socket) => {
     "playbackInfo",
     ({
       canvasPlaybackUrl,
-      webcamPlaybackUrl,
       roomId,
     }: {
       canvasPlaybackUrl: string | null;
-      webcamPlaybackUrl: string | null;
       roomId: string;
     }) => {
       if (typeof roomId !== "string" || !roomId) {
@@ -177,13 +179,11 @@ io.on("connection", (socket: Socket) => {
 
       io.to(roomId).emit("playbackInfo", {
         canvasPlaybackUrl,
-        webcamPlaybackUrl,
       });
       logger.info("Playback info sent", {
         socketId: socket.id,
         roomId,
         canvasPlaybackUrl,
-        webcamPlaybackUrl,
       });
     }
   );
@@ -218,5 +218,4 @@ process.on("SIGTERM", () => {
     process.exit(0);
   });
   io.close();
-  tldrawWSS.close();
 });

@@ -1,241 +1,167 @@
-
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
+import { Copy, Video, X } from "lucide-react";
 
 interface StreamManagerProps {
     roomId: string;
     setCanvasPlaybackUrl: (url: string | null) => void;
-    setWebcamPlaybackUrl: (url: string | null) => void;
     isStreaming: boolean;
     setIsStreaming: (value: boolean) => void;
-}
-
-interface StreamData {
-    id: string;
-    streamKey: string;
-    playbackId: string;
-    isActive: boolean;
+    setStreamId: (value: string | null) => void;
+    playbackUrl: string;
+    showStreamDetails: boolean;
+    setShowStreamDetails: (value: boolean) => void;
 }
 
 export default function StreamManager({
     roomId,
     setCanvasPlaybackUrl,
-    setWebcamPlaybackUrl,
     isStreaming,
     setIsStreaming,
+    setStreamId,
+    playbackUrl,
+    showStreamDetails,
+    setShowStreamDetails,
 }: StreamManagerProps) {
     const [socket, setSocket] = useState<Socket | null>(null);
-    const [canvasStream, setCanvasStream] = useState<StreamData | null>(null);
-    const [webcamStream, setWebcamStream] = useState<StreamData | null>(null);
-
-    const createLivepeerStream = async (name: string) => {
-        if (!process.env.NEXT_PUBLIC_LIVEPEER_API_KEY) {
-            console.error("LIVEPEER_API_KEY missing");
-            toast.error("Configure LIVEPEER_API_KEY");
-            return null;
-        }
-
-        try {
-            const response = await fetch("https://livepeer.studio/api/stream", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${process.env.NEXT_PUBLIC_LIVEPEER_API_KEY}`,
-                },
-                body: JSON.stringify({
-                    name,
-                    profiles: [
-                        { name: "720p", bitrate: 2000000, fps: 30, width: 1280, height: 720 },
-                        { name: "480p", bitrate: 1000000, fps: 30, width: 854, height: 480 },
-                    ],
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to create stream: ${await response.text()}`);
-            }
-
-            const result = await response.json();
-            console.log("Livepeer response:", JSON.stringify(result, null, 2));
-            return result;
-        } catch (error: any) {
-            console.error("Create Livepeer stream error:", error);
-            toast.error(`Failed to create stream: ${error.message}`);
-            return null;
-        }
-    };
-
-    const checkStreamStatus = async (streamId: string) => {
-        if (!process.env.NEXT_PUBLIC_LIVEPEER_API_KEY) {
-            console.error("LIVEPEER_API_KEY missing");
-            return false;
-        }
-
-        try {
-            const response = await fetch(`https://livepeer.studio/api/stream/${streamId}`, {
-                method: "GET",
-                headers: {
-                    Authorization: `Bearer ${process.env.NEXT_PUBLIC_LIVEPEER_API_KEY}`,
-                },
-            });
-            if (!response.ok) {
-                console.error(`Stream status check failed (${response.status}):`, await response.text());
-                return false;
-            }
-            const result = await response.json();
-            return result.isActive;
-        } catch (error) {
-            console.error("Stream status error:", error);
-            return false;
-        }
-    };
-
-    const handleStartStreaming = async () => {
-        // Check if existing streams are active
-        let canvasStreamActive = canvasStream ? await checkStreamStatus(canvasStream.id) : false;
-        let webcamStreamActive = webcamStream ? await checkStreamStatus(webcamStream.id) : false;
-
-        if (canvasStreamActive || webcamStreamActive) {
-            toast("Streams are already active", {
-                action: {
-                    label: "Continue",
-                    onClick: () => {
-                        setIsStreaming(true);
-                        if (canvasStream) {
-                            console.log(`✅ Canvas RTMP instructions:
-                    Configure OBS Studio:
-                    1. Settings > Stream > Custom
-                    2. URL: rtmp://rtmp.livepeer.com/live
-                    3. Stream Key: ${canvasStream.streamKey}
-                    4. Source: Display Capture
-                    5. Start Streaming
-                    Playback: https://livepeer.studio/hls/${canvasStream.playbackId}/index.m3u8`);
-                            setCanvasPlaybackUrl(`https://livepeer.studio/hls/${canvasStream.playbackId}/index.m3u8`);
-                            socket?.emit("updateCanvasPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${canvasStream.playbackId}/index.m3u8` });
-                        }
-                        if (webcamStream) {
-                            console.log(`✅ Webcam RTMP instructions:
-                    Configure OBS Studio:
-                    1. Settings > Stream > Custom
-                    2. URL: rtmp://rtmp.livepeer.com/live
-                    3. Stream Key: ${webcamStream.streamKey}
-                    4. Source: Video Capture
-                    5. Start Streaming
-                    Playback: https://livepeer.studio/hls/${webcamStream.playbackId}/index.m3u8`);
-                            setWebcamPlaybackUrl(`https://livepeer.studio/hls/${webcamStream.playbackId}/index.m3u8`);
-                            socket?.emit("updateWebcamPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${webcamStream.playbackId}/index.m3u8` });
-                        }
-                    },
-                },
-                cancel: {
-                    label: "Cancel",
-                    onClick: () => { },
-                },
-            });
-            return;
-        }
-
-        // Create new streams if none are active
-        const canvasResult = await createLivepeerStream(`Canvas Stream ${uuidv4()}`);
-        const webcamResult = await createLivepeerStream(`Webcam Stream ${uuidv4()}`);
-
-        if (canvasResult) {
-            setCanvasStream({
-                id: canvasResult.id,
-                streamKey: canvasResult.streamKey,
-                playbackId: canvasResult.playbackId,
-                isActive: canvasResult.isActive,
-            });
-            console.log(`✅ Canvas RTMP instructions:
-                Configure OBS Studio:
-                1. Settings > Stream > Custom
-                2. URL: rtmp://rtmp.livepeer.com/live
-                3. Stream Key: ${canvasResult.streamKey}
-                4. Source: Display Capture
-                5. Start Streaming
-                Playback: https://livepeer.studio/hls/${canvasResult.playbackId}/index.m3u8`);
-            setCanvasPlaybackUrl(`https://livepeer.studio/hls/${canvasResult.playbackId}/index.m3u8`);
-            socket?.emit("updateCanvasPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${canvasResult.playbackId}/index.m3u8` });
-        }
-
-        if (webcamResult) {
-            setWebcamStream({
-                id: webcamResult.id,
-                streamKey: webcamResult.streamKey,
-                playbackId: webcamResult.playbackId,
-                isActive: webcamResult.isActive,
-            });
-            console.log(`✅ Webcam RTMP instructions:
-                Configure OBS Studio:
-                1. Settings > Stream > Custom
-                2. URL: rtmp://rtmp.livepeer.com/live
-                3. Stream Key: ${webcamResult.streamKey}
-                4. Source: Video Capture
-                5. Start Streaming
-                Playback: https://livepeer.studio/hls/${webcamResult.playbackId}/index.m3u8`);
-            setWebcamPlaybackUrl(`https://livepeer.studio/hls/${webcamResult.playbackId}/index.m3u8`);
-            socket?.emit("updateWebcamPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${webcamResult.playbackId}/index.m3u8` });
-        }
-
-        if (canvasResult || webcamResult) {
-            setIsStreaming(true);
-        }
-    };
-
-    const handleStopStreaming = () => {
-        toast("Are you sure you want to end the livestream?", {
-            action: {
-                label: "End Stream",
-                onClick: () => {
-                    setIsStreaming(false);
-                    console.log("⏹ Stop streaming in OBS Studio");
-                    setCanvasPlaybackUrl(null);
-                    setWebcamPlaybackUrl(null);
-                    socket?.emit("updateCanvasPlaybackUrl", { roomId, url: null });
-                    socket?.emit("updateWebcamPlaybackUrl", { roomId, url: null });
-                    setCanvasStream(null);
-                    setWebcamStream(null);
-                },
-            },
-            cancel: {
-                label: "Cancel",
-                onClick: () => { },
-            },
-        });
-    };
+    const [modal, setModal] = useState<{ type: "start" | "stop" | null }>({ type: null });
 
     useEffect(() => {
-        console.log("StreamManager mounted, isStreaming:", isStreaming);
         const newSocket = io(process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:3001");
         setSocket(newSocket);
 
         return () => {
             newSocket.disconnect();
         };
-    }, [isStreaming]);
+    }, []);
 
     useEffect(() => {
-        if (isStreaming) {
-            toast("Start streaming?", {
-                action: {
-                    label: "Confirm",
-                    onClick: handleStartStreaming,
-                },
-                cancel: {
-                    label: "Cancel",
-                    onClick: () => setIsStreaming(false),
-                },
-            });
-        } else {
-            if (canvasStream || webcamStream) {
-                handleStopStreaming();
-            }
+        if (isStreaming && modal.type !== "start") {
+            setModal({ type: "start" });
+        } else if (!isStreaming && modal.type !== "stop" && modal.type !== null) {
+            setModal({ type: "stop" });
         }
     }, [isStreaming]);
 
-    return null;
+    const handleStartStreaming = () => {
+        setIsStreaming(true);
+        setModal({ type: null });
+    };
+
+    const handleStopStreaming = () => {
+        setIsStreaming(false);
+        setCanvasPlaybackUrl(null);
+        setStreamId(null);
+        setModal({ type: null });
+        setShowStreamDetails(false);
+        toast.success("Streaming stopped successfully!");
+    };
+
+    const copyPlaybackUrl = () => {
+        if (playbackUrl) {
+            navigator.clipboard.writeText(playbackUrl);
+            toast.success("Playback URL copied to clipboard!");
+        }
+    };
+
+    useEffect(() => {
+        if (socket && playbackUrl) {
+            socket.emit("updateCanvasPlaybackUrl", { roomId, url: playbackUrl });
+        }
+    }, [socket, playbackUrl, roomId]);
+
+    return (
+        <>
+            {/* Start/Stop Modal */}
+            {modal.type && (
+                <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-8 mx-4 sm:mx-0">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                            {modal.type === "start" ? "Start Livestream" : "End Livestream"}
+                        </h2>
+                        <p className="text-gray-600 mb-6">
+                            {modal.type === "start"
+                                ? "Do you want to proceed with broadcasting your canvas live?"
+                                : "This will end your live broadcast."}
+                        </p>
+                        <div className="flex justify-center gap-4">
+                            <button
+                                className="px-6 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium transition-colors"
+                                onClick={() => {
+                                    if (modal.type === "start") {
+                                        setIsStreaming(false);
+                                    }
+                                    setModal({ type: null });
+                                }}
+                            >
+                                {modal.type === "start" ? "No" : "Cancel"}
+                            </button>
+                            <button
+                                className="px-6 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+                                onClick={() => {
+                                    if (modal.type === "start") {
+                                        handleStartStreaming();
+                                    } else {
+                                        handleStopStreaming();
+                                    }
+                                }}
+                            >
+                                {modal.type === "start" ? "Yes" : "End"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Stream Details Modal */}
+            {showStreamDetails && playbackUrl && (
+                <div className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/50">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-8 mx-4 sm:mx-0">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-2xl font-bold text-gray-900">Stream Details</h2>
+                            <button
+                                className="p-2 rounded-full hover:bg-gray-100"
+                                onClick={() => setShowStreamDetails(false)}
+                            >
+                                <X className="w-5 h-5 text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="flex justify-center mb-4">
+                            <Video className="w-12 h-12 text-blue-600" />
+                        </div>
+                        <p className="text-gray-600 mb-6 text-center">
+                            Share this link to let viewers watch your canvas stream:
+                        </p>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Playback URL</label>
+                                <div className="flex items-center mt-1">
+                                    <code className="flex-1 text-sm bg-gray-100 rounded-md px-3 py-2 font-mono truncate">
+                                        {playbackUrl}
+                                    </code>
+                                    <button
+                                        onClick={copyPlaybackUrl}
+                                        className="ml-2 p-2 rounded-md hover:bg-gray-100"
+                                    >
+                                        <Copy className="w-5 h-5 text-gray-500" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-center mt-6">
+                            <button
+                                className="px-6 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+                                onClick={() => setShowStreamDetails(false)}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
 }
