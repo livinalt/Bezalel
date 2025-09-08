@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Mic, MicOff, Video, VideoOff } from "lucide-react";
-import { toast } from "sonner";
+import { useEffect, useRef } from "react";
+import { Video, VideoOff, Mic, MicOff, Minimize2, Maximize2 } from "lucide-react";
 
 interface VideoFeedProps {
     useWebcam: boolean;
     setUseWebcam: (value: boolean) => void;
     isMuted: boolean;
     setIsMuted: (value: boolean) => void;
-    onStreamChange: (stream: MediaStream | null) => void;
-    isEnhanced: boolean;
-    enhanceWebcam: boolean;
-    webcamPlaybackUrl: string | null;
+    onStreamChange?: (stream: MediaStream | null) => void;
+    isEnhanced?: boolean;
+    enhanceWebcam?: boolean;
+    webcamPlaybackUrl?: string | null;
+    isMinimized: boolean;
+    setIsMinimized: (v: boolean) => void;
 }
 
 export default function VideoFeed({
@@ -21,132 +22,78 @@ export default function VideoFeed({
     isMuted,
     setIsMuted,
     onStreamChange,
-    isEnhanced,
-    enhanceWebcam,
     webcamPlaybackUrl,
+    isMinimized,
+    setIsMinimized,
 }: VideoFeedProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
-    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-    const [error, setError] = useState<string | null>(null);
 
-    // Cleanup helper to stop tracks
-    const stopStream = useCallback((stream: MediaStream | null) => {
-        stream?.getTracks().forEach((t) => t.stop());
-    }, []);
-
-    // Request webcam only when toggled on
     useEffect(() => {
-        let stream: MediaStream | null = null;
-
-        if (useWebcam && !isEnhanced) {
-            navigator.mediaDevices
-                .getUserMedia({ video: true, audio: true })
-                .then((s) => {
-                    stream = s;
-                    setLocalStream(s);
-                    onStreamChange(s);
-
-                    if (videoRef.current) {
-                        videoRef.current.srcObject = s;
-                        videoRef.current.play().catch(() => { });
-                    }
-                })
-                .catch((err) => {
-                    console.error("Webcam error:", err);
-                    setError("Could not access webcam");
-                    toast.error("Could not access webcam");
-                    setUseWebcam(false);
-                });
-        } else {
-            setLocalStream(null);
-            onStreamChange(null);
-            if (videoRef.current) {
-                videoRef.current.srcObject = null;
-            }
+        if (!useWebcam) {
+            if (onStreamChange) onStreamChange(null);
+            return;
         }
+
+        const startStream = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true,
+                });
+
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                }
+                if (onStreamChange) onStreamChange(stream);
+            } catch (err) {
+                console.error("Error accessing webcam:", err);
+            }
+        };
+
+        startStream();
 
         return () => {
-            stopStream(stream);
+            if (videoRef.current?.srcObject) {
+                (videoRef.current.srcObject as MediaStream)
+                    .getTracks()
+                    .forEach((track) => track.stop());
+            }
         };
-    }, [useWebcam, isEnhanced, onStreamChange, setUseWebcam, stopStream]);
-
-    // Mute/unmute tracks
-    useEffect(() => {
-        if (localStream) {
-            localStream.getAudioTracks().forEach((track) => {
-                track.enabled = !isMuted;
-            });
-        }
-        if (videoRef.current) {
-            videoRef.current.muted = isMuted;
-        }
-    }, [isMuted, localStream]);
-
-    // Enhanced (HLS playback)
-    useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        if (isEnhanced && enhanceWebcam && webcamPlaybackUrl) {
-            import("hls.js").then(({ default: Hls }) => {
-                if (Hls.isSupported()) {
-                    const hls = new Hls();
-                    hls.loadSource(webcamPlaybackUrl);
-                    hls.attachMedia(video);
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        video.play().catch(() => setError("Failed to play stream"));
-                    });
-                } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                    video.src = webcamPlaybackUrl;
-                    video.addEventListener("loadedmetadata", () => {
-                        video.play().catch(() => setError("Failed to play stream"));
-                    });
-                } else {
-                    setError("HLS not supported in this browser");
-                }
-            });
-        }
-    }, [isEnhanced, enhanceWebcam, webcamPlaybackUrl]);
+    }, [useWebcam, onStreamChange]);
 
     return (
         <div className="relative w-full h-full bg-black">
-            {/* Video */}
+            {/* Camera feed */}
             <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted={isMuted}
-                className={`w-full h-full object-cover ${error ? "opacity-40" : ""}`}
+                className="w-full h-full object-cover"
             />
 
-            {/* Error Overlay */}
-            {error && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-red-500 text-sm px-4 text-center">
-                    {error}
-                </div>
-            )}
-
-            {/* Controls */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-4">
-                <button
-                    onClick={() => setIsMuted(!isMuted)}
-                    className="p-3 rounded-full bg-gray-900/80 text-white hover:bg-gray-700 shadow"
-                >
-                    {isMuted ? (
-                        <MicOff className="w-6 h-6" />
-                    ) : (
-                        <Mic className="w-6 h-6" />
-                    )}
-                </button>
+            {/* Floating controls */}
+            <div
+                className={`absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2 px-2 py-1 rounded-lg bg-black/50 transition ${isMinimized ? "scale-75 opacity-90" : ""
+                    }`}
+            >
                 <button
                     onClick={() => setUseWebcam(!useWebcam)}
-                    className="p-3 rounded-full bg-gray-900/80 text-white hover:bg-gray-700 shadow"
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white"
                 >
-                    {useWebcam ? (
-                        <Video className="w-6 h-6" />
-                    ) : (
-                        <VideoOff className="w-6 h-6" />
-                    )}
+                    {useWebcam ? <Video size={16} /> : <VideoOff size={16} />}
+                </button>
+                <button
+                    onClick={() => setIsMuted(!isMuted)}
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white"
+                >
+                    {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
+                <button
+                    onClick={() => setIsMinimized(!isMinimized)}
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white"
+                >
+                    {isMinimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
                 </button>
             </div>
         </div>

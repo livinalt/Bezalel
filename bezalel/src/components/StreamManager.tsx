@@ -1,222 +1,241 @@
+
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Socket } from "socket.io-client";
+import { useEffect, useState, useCallback } from "react";
+import { io, Socket } from "socket.io-client";
+import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 
 interface StreamManagerProps {
-    isStreaming: boolean;
-    useWebcam: boolean;
-    enhanceWebcam: boolean;
-    aiPrompt: string;
-    webcamPrompt: string;
-    roomId: string | string[];
-    socketRef: React.MutableRefObject<Socket | null>;
-    canvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
-    setStreamId: (id: string | null) => void;
-    webcamStream: MediaStream | null;
+    roomId: string;
     setCanvasPlaybackUrl: (url: string | null) => void;
     setWebcamPlaybackUrl: (url: string | null) => void;
-    setIsEnhanced: (value: boolean) => void;
+    isStreaming: boolean;
     setIsStreaming: (value: boolean) => void;
 }
 
+interface StreamData {
+    id: string;
+    streamKey: string;
+    playbackId: string;
+    isActive: boolean;
+}
+
 export default function StreamManager({
-    isStreaming,
-    useWebcam,
-    enhanceWebcam,
-    aiPrompt,
-    webcamPrompt,
     roomId,
-    socketRef,
-    canvasRef,
-    setStreamId,
-    webcamStream,
     setCanvasPlaybackUrl,
     setWebcamPlaybackUrl,
-    setIsEnhanced,
+    isStreaming,
     setIsStreaming,
 }: StreamManagerProps) {
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const wsRef = useRef<WebSocket | null>(null);
-    const canvasStreamRef = useRef<MediaStream | null>(null);
-    const webcamRecorderRef = useRef<MediaRecorder | null>(null);
-    const webcamWsRef = useRef<WebSocket | null>(null);
+    const [socket, setSocket] = useState<Socket | null>(null);
+    const [canvasStream, setCanvasStream] = useState<StreamData | null>(null);
+    const [webcamStream, setWebcamStream] = useState<StreamData | null>(null);
 
-    useEffect(() => {
-        let isCancelled = false;
+    const createLivepeerStream = async (name: string) => {
+        if (!process.env.NEXT_PUBLIC_LIVEPEER_API_KEY) {
+            console.error("LIVEPEER_API_KEY missing");
+            toast.error("Configure LIVEPEER_API_KEY");
+            return null;
+        }
 
-        const startCanvasStreaming = async () => {
-            try {
-                const baseUrl = "https://api.daydream.live";
-                const apiUrl = new URL("/streams", baseUrl);
-                const response = await fetch(apiUrl.toString(), {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${process.env.DAYDREAM_API_KEY}`,
+        try {
+            const response = await fetch("https://livepeer.studio/api/stream", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${process.env.NEXT_PUBLIC_LIVEPEER_API_KEY}`,
+                },
+                body: JSON.stringify({
+                    name,
+                    profiles: [
+                        { name: "720p", bitrate: 2000000, fps: 30, width: 1280, height: 720 },
+                        { name: "480p", bitrate: 1000000, fps: 30, width: 854, height: 480 },
+                    ],
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to create stream: ${await response.text()}`);
+            }
+
+            const result = await response.json();
+            console.log("Livepeer response:", JSON.stringify(result, null, 2));
+            return result;
+        } catch (error: any) {
+            console.error("Create Livepeer stream error:", error);
+            toast.error(`Failed to create stream: ${error.message}`);
+            return null;
+        }
+    };
+
+    const checkStreamStatus = async (streamId: string) => {
+        if (!process.env.NEXT_PUBLIC_LIVEPEER_API_KEY) {
+            console.error("LIVEPEER_API_KEY missing");
+            return false;
+        }
+
+        try {
+            const response = await fetch(`https://livepeer.studio/api/stream/${streamId}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${process.env.NEXT_PUBLIC_LIVEPEER_API_KEY}`,
+                },
+            });
+            if (!response.ok) {
+                console.error(`Stream status check failed (${response.status}):`, await response.text());
+                return false;
+            }
+            const result = await response.json();
+            return result.isActive;
+        } catch (error) {
+            console.error("Stream status error:", error);
+            return false;
+        }
+    };
+
+    const handleStartStreaming = async () => {
+        // Check if existing streams are active
+        let canvasStreamActive = canvasStream ? await checkStreamStatus(canvasStream.id) : false;
+        let webcamStreamActive = webcamStream ? await checkStreamStatus(webcamStream.id) : false;
+
+        if (canvasStreamActive || webcamStreamActive) {
+            toast("Streams are already active", {
+                action: {
+                    label: "Continue",
+                    onClick: () => {
+                        setIsStreaming(true);
+                        if (canvasStream) {
+                            console.log(`✅ Canvas RTMP instructions:
+                    Configure OBS Studio:
+                    1. Settings > Stream > Custom
+                    2. URL: rtmp://rtmp.livepeer.com/live
+                    3. Stream Key: ${canvasStream.streamKey}
+                    4. Source: Display Capture
+                    5. Start Streaming
+                    Playback: https://livepeer.studio/hls/${canvasStream.playbackId}/index.m3u8`);
+                            setCanvasPlaybackUrl(`https://livepeer.studio/hls/${canvasStream.playbackId}/index.m3u8`);
+                            socket?.emit("updateCanvasPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${canvasStream.playbackId}/index.m3u8` });
+                        }
+                        if (webcamStream) {
+                            console.log(`✅ Webcam RTMP instructions:
+                    Configure OBS Studio:
+                    1. Settings > Stream > Custom
+                    2. URL: rtmp://rtmp.livepeer.com/live
+                    3. Stream Key: ${webcamStream.streamKey}
+                    4. Source: Video Capture
+                    5. Start Streaming
+                    Playback: https://livepeer.studio/hls/${webcamStream.playbackId}/index.m3u8`);
+                            setWebcamPlaybackUrl(`https://livepeer.studio/hls/${webcamStream.playbackId}/index.m3u8`);
+                            socket?.emit("updateWebcamPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${webcamStream.playbackId}/index.m3u8` });
+                        }
                     },
-                    body: JSON.stringify({ type: "combined" }),
-                    credentials: "include",
-                });
+                },
+                cancel: {
+                    label: "Cancel",
+                    onClick: () => { },
+                },
+            });
+            return;
+        }
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-                }
+        // Create new streams if none are active
+        const canvasResult = await createLivepeerStream(`Canvas Stream ${uuidv4()}`);
+        const webcamResult = await createLivepeerStream(`Webcam Stream ${uuidv4()}`);
 
-                const data = await response.json();
-                if (isCancelled) return;
+        if (canvasResult) {
+            setCanvasStream({
+                id: canvasResult.id,
+                streamKey: canvasResult.streamKey,
+                playbackId: canvasResult.playbackId,
+                isActive: canvasResult.isActive,
+            });
+            console.log(`✅ Canvas RTMP instructions:
+                Configure OBS Studio:
+                1. Settings > Stream > Custom
+                2. URL: rtmp://rtmp.livepeer.com/live
+                3. Stream Key: ${canvasResult.streamKey}
+                4. Source: Display Capture
+                5. Start Streaming
+                Playback: https://livepeer.studio/hls/${canvasResult.playbackId}/index.m3u8`);
+            setCanvasPlaybackUrl(`https://livepeer.studio/hls/${canvasResult.playbackId}/index.m3u8`);
+            socket?.emit("updateCanvasPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${canvasResult.playbackId}/index.m3u8` });
+        }
 
-                setStreamId(data.id);
+        if (webcamResult) {
+            setWebcamStream({
+                id: webcamResult.id,
+                streamKey: webcamResult.streamKey,
+                playbackId: webcamResult.playbackId,
+                isActive: webcamResult.isActive,
+            });
+            console.log(`✅ Webcam RTMP instructions:
+                Configure OBS Studio:
+                1. Settings > Stream > Custom
+                2. URL: rtmp://rtmp.livepeer.com/live
+                3. Stream Key: ${webcamResult.streamKey}
+                4. Source: Video Capture
+                5. Start Streaming
+                Playback: https://livepeer.studio/hls/${webcamResult.playbackId}/index.m3u8`);
+            setWebcamPlaybackUrl(`https://livepeer.studio/hls/${webcamResult.playbackId}/index.m3u8`);
+            socket?.emit("updateWebcamPlaybackUrl", { roomId, url: `https://livepeer.studio/hls/${webcamResult.playbackId}/index.m3u8` });
+        }
 
-                const ws = new WebSocket(data.whip_url);
-                wsRef.current = ws;
+        if (canvasResult || webcamResult) {
+            setIsStreaming(true);
+        }
+    };
 
-                const combinedStream = new MediaStream();
-                if (canvasRef.current) {
-                    canvasStreamRef.current = canvasRef.current.captureStream(30);
-                    canvasStreamRef.current.getVideoTracks().forEach((t) => combinedStream.addTrack(t));
-                }
-                if (useWebcam && !enhanceWebcam && webcamStream) {
-                    webcamStream.getTracks().forEach((t) => combinedStream.addTrack(t));
-                }
-
-                mediaRecorderRef.current = new MediaRecorder(combinedStream, {
-                    mimeType: "video/webm;codecs=vp8,opus",
-                    videoBitsPerSecond: 2500000,
-                });
-
-                mediaRecorderRef.current.ondataavailable = (event) => {
-                    if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                        ws.send(event.data);
-                    }
-                };
-
-                mediaRecorderRef.current.start(1000);
-
-                ws.onopen = () => {
-                    if (!isCancelled) toast.success("Streaming started");
-                };
-
-                ws.onclose = () => {
-                    if (!isCancelled) toast.error("Streaming connection closed");
-                };
-
-                setCanvasPlaybackUrl(data.playback_url);
-            } catch (error) {
-                if (!isCancelled) {
-                    console.error("Streaming error:", error);
-                    toast.error(`Failed to start streaming: ${error.message}`);
+    const handleStopStreaming = () => {
+        toast("Are you sure you want to end the livestream?", {
+            action: {
+                label: "End Stream",
+                onClick: () => {
                     setIsStreaming(false);
-                    setStreamId(null);
+                    console.log("⏹ Stop streaming in OBS Studio");
                     setCanvasPlaybackUrl(null);
-                }
-            }
-        };
-
-        if (isStreaming) {
-            startCanvasStreaming();
-        }
-
-        return () => {
-            isCancelled = true;
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-                mediaRecorderRef.current.stop();
-            }
-            if (wsRef.current) {
-                wsRef.current.close();
-            }
-            if (canvasStreamRef.current) {
-                canvasStreamRef.current.getTracks().forEach((t) => t.stop());
-            }
-            setStreamId(null);
-            setCanvasPlaybackUrl(null);
-        };
-    }, [isStreaming, useWebcam, enhanceWebcam, webcamStream, canvasRef, setStreamId, setCanvasPlaybackUrl, setIsStreaming]);
+                    setWebcamPlaybackUrl(null);
+                    socket?.emit("updateCanvasPlaybackUrl", { roomId, url: null });
+                    socket?.emit("updateWebcamPlaybackUrl", { roomId, url: null });
+                    setCanvasStream(null);
+                    setWebcamStream(null);
+                },
+            },
+            cancel: {
+                label: "Cancel",
+                onClick: () => { },
+            },
+        });
+    };
 
     useEffect(() => {
-        let isCancelled = false;
-
-        const startWebcamStreaming = async () => {
-            if (!webcamStream) return;
-            if (!webcamPrompt) {
-                toast.error("Enter a webcam prompt first");
-                return;
-            }
-            try {
-                const baseUrl = "https://api.daydream.live";
-                const apiUrl = new URL("/streams", baseUrl);
-                const response = await fetch(apiUrl.toString(), {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${process.env.DAYDREAM_API_KEY}`,
-                    },
-                    body: JSON.stringify({ type: "webcam", prompt: webcamPrompt }),
-                    credentials: "include",
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-                if (isCancelled) return;
-
-                const ws = new WebSocket(data.whip_url);
-                webcamWsRef.current = ws;
-
-                const recorder = new MediaRecorder(webcamStream, {
-                    mimeType: "video/webm;codecs=vp8,opus",
-                    videoBitsPerSecond: 2500000,
-                });
-
-                recorder.ondataavailable = (event) => {
-                    if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                        ws.send(event.data);
-                    }
-                };
-
-                recorder.start(1000);
-                webcamRecorderRef.current = recorder;
-
-                ws.onopen = () => {
-                    if (!isCancelled) toast.success("Webcam enhancement started");
-                };
-
-                ws.onclose = () => {
-                    if (!isCancelled) toast.error("Webcam streaming connection closed");
-                };
-
-                setWebcamPlaybackUrl(data.playback_url);
-                setIsEnhanced(true);
-            } catch (error) {
-                if (!isCancelled) {
-                    console.error("Webcam enhancement error:", error);
-                    toast.error(`Failed to enhance webcam: ${error.message}`);
-                    setWebcamPlaybackUrl(null);
-                    setIsEnhanced(false);
-                    setIsStreaming(false);
-                }
-            }
-        };
-
-        if (isStreaming && useWebcam && enhanceWebcam) {
-            startWebcamStreaming();
-        }
+        console.log("StreamManager mounted, isStreaming:", isStreaming);
+        const newSocket = io(process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:3001");
+        setSocket(newSocket);
 
         return () => {
-            isCancelled = true;
-            if (webcamRecorderRef.current && webcamRecorderRef.current.state !== "inactive") {
-                webcamRecorderRef.current.stop();
-            }
-            if (webcamWsRef.current) {
-                webcamWsRef.current.close();
-            }
-            setWebcamPlaybackUrl(null);
-            setIsEnhanced(false);
+            newSocket.disconnect();
         };
-    }, [isStreaming, useWebcam, enhanceWebcam, webcamPrompt, webcamStream, setWebcamPlaybackUrl, setIsEnhanced, setIsStreaming]);
+    }, [isStreaming]);
+
+    useEffect(() => {
+        if (isStreaming) {
+            toast("Start streaming?", {
+                action: {
+                    label: "Confirm",
+                    onClick: handleStartStreaming,
+                },
+                cancel: {
+                    label: "Cancel",
+                    onClick: () => setIsStreaming(false),
+                },
+            });
+        } else {
+            if (canvasStream || webcamStream) {
+                handleStopStreaming();
+            }
+        }
+    }, [isStreaming]);
 
     return null;
 }

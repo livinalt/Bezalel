@@ -6,11 +6,10 @@ import { useParams } from "next/navigation";
 import io, { Socket } from "socket.io-client";
 import { toast } from "sonner";
 import { v4 as uuid } from "uuid";
+import { Editor } from "@tldraw/tldraw";
 import ThemeToggle from "@/components/ThemeToggle";
-// import Toolbar from "@/components/Toolbar";
 import VideoFeed from "@/components/VideoFeed";
 import StreamManager from "@/components/StreamManager";
-// import PageSidebar from "@/components/PageSidebar";
 import Canvas from "@/components/Canvas";
 import LayersPanel from "@/components/LayersPanel";
 import { PageData } from "@/components/types";
@@ -47,15 +46,29 @@ export default function Board() {
     const [isEnhanced, setIsEnhanced] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
     const [rndPosition, setRndPosition] = useState({ x: 20, y: 20 });
-    const [viewUrl, setViewUrl] = useState<string>(""); // Ensure viewUrl is initialized
+    const [viewUrl, setViewUrl] = useState<string>("");
 
     const initialPage = { id: uuid(), name: "Page 1", canvasData: null };
     const [pages, setPages] = useState<PageData[]>([initialPage]);
     const [activePageId, setActivePageId] = useState(initialPage.id);
 
+    const [isMinimized, setIsMinimized] = useState(false);
+
+
     const handleStreamChange = useCallback((stream: MediaStream | null) => {
         setWebcamStream(stream);
     }, []);
+
+    const saveCanvasState = useCallback(() => {
+        if (!editorRef.current) return;
+        const snapshot = editorRef.current.store.getSnapshot();
+        const snapshotJSON = JSON.stringify(snapshot);
+        if (snapshotJSON === lastSavedState.current) return;
+        setPages((prevPages) =>
+            prevPages.map((p) => (p.id === activePageId ? { ...p, canvasData: snapshot } : p))
+        );
+        lastSavedState.current = snapshotJSON;
+    }, [activePageId]);
 
     const handleAddPage = () => {
         const newPage = { id: uuid(), name: `Page ${pages.length + 1}`, canvasData: null };
@@ -66,6 +79,7 @@ export default function Board() {
             editorRef.current.history.clear();
             editorRef.current.store.clear();
         }
+        saveCanvasState();
     };
 
     const handleRenamePage = (id: string, newName: string) => {
@@ -90,17 +104,6 @@ export default function Board() {
             return remaining;
         });
     };
-
-    const saveCanvasState = useCallback(() => {
-        if (!editorRef.current) return;
-        const snapshot = editorRef.current.store.getSnapshot();
-        const snapshotJSON = JSON.stringify(snapshot);
-        if (snapshotJSON === lastSavedState.current) return;
-        setPages((prevPages) =>
-            prevPages.map((p) => (p.id === activePageId ? { ...p, canvasData: snapshot } : p))
-        );
-        lastSavedState.current = snapshotJSON;
-    }, [activePageId]);
 
     const handleUndo = () => {
         editorRef.current?.history.undo();
@@ -140,6 +143,7 @@ export default function Board() {
                 y: Math.max(20, window.innerHeight - 250),
             });
         }
+        console.log("API Key in Board:", process.env.NEXT_PUBLIC_DAYDREAM_API_KEY);
     }, [roomId]);
 
     useEffect(() => {
@@ -197,7 +201,7 @@ export default function Board() {
                 <div className="flex items-center gap-2">
                     <input
                         type="text"
-                        value={viewUrl || ""} // Fallback to empty string to prevent undefined error
+                        value={viewUrl || ""}
                         readOnly
                         className="text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md px-2 py-1 w-64 focus:outline-none focus:ring-2 focus:ring-blue-400"
                         aria-label="view link"
@@ -216,20 +220,24 @@ export default function Board() {
             </header>
 
             <main className="absolute top-14 bottom-0 left-0 right-48 flex">
-                
                 <div className="flex-1 relative">
                     <Canvas
-                        roomId={roomId}
                         showGrid={showGrid}
-                        showRulers={showRulers}
                         canvasRef={canvasRef}
                         editorRef={editorRef}
-                        brushColor={brushColor}
-                        brushWidth={brushWidth}
-                        brushOpacity={brushOpacity}
-                        activeTool={activeTool}
-                        isDrawingMode={isDrawingMode}
-                        brushType={brushType}
+                        showRulers={showRulers}
+                        aiPrompt={aiPrompt}
+                        setAiPrompt={setAiPrompt}
+                        saveCanvasState={saveCanvasState}
+                        webcamPrompt={webcamPrompt}
+                        setWebcamPrompt={setWebcamPrompt}
+                        isStreaming={isStreaming}
+                        setIsStreaming={setIsStreaming}
+                        useWebcam={useWebcam}
+                        setUseWebcam={setUseWebcam}
+                        enhanceWebcam={enhanceWebcam}
+                        setEnhanceWebcam={setEnhanceWebcam}
+                        streamId={streamId}
                     />
                 </div>
 
@@ -253,36 +261,43 @@ export default function Board() {
                 />
             </main>
 
-
             {isMounted && (
-                <Rnd
-                    default={{
-                        x: rndPosition.x,
-                        y: rndPosition.y,
-                        width: 320,
-                        height: 240,
-                    }}
-                    minWidth={200}
-                    minHeight={150}
-                    bounds="window"
-                    dragHandleClassName="video-drag-handle"
-                    className="z-[9999] shadow-lg rounded-lg overflow-hidden bg-black"
-                >
-                    <div className="video-drag-handle cursor-move bg-gray-800 text-white text-xs px-2 py-1">
-                        Camera
-                    </div>
-                    <MemoizedVideoFeed
-                        useWebcam={useWebcam}
-                        setUseWebcam={setUseWebcam}
-                        isMuted={isMuted}
-                        setIsMuted={setIsMuted}
-                        onStreamChange={handleStreamChange}
-                        isEnhanced={isEnhanced}
-                        enhanceWebcam={enhanceWebcam}
-                        webcamPlaybackUrl={webcamPlaybackUrl}
-                    />
-                </Rnd>
+                <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-[99999]">
+                    <Rnd
+                        default={{
+                            x: rndPosition.x,
+                            y: rndPosition.y,
+                            width: 240,
+                            height: 160,
+                        }}
+                        minWidth={160}
+                        minHeight={100}
+                        bounds="window"
+                        enableResizing={!isMinimized}
+                        size={
+                            isMinimized
+                                ? { width: 160, height: 100 } // thumbnail size
+                                : undefined // allow resizing when not minimized
+                        }
+                        dragHandleClassName="video-drag-handle"
+                        className="pointer-events-auto shadow-lg rounded-lg overflow-hidden bg-black"
+                    >
+                        <MemoizedVideoFeed
+                            useWebcam={useWebcam}
+                            setUseWebcam={setUseWebcam}
+                            isMuted={isMuted}
+                            setIsMuted={setIsMuted}
+                            onStreamChange={handleStreamChange}
+                            isEnhanced={isEnhanced}
+                            enhanceWebcam={enhanceWebcam}
+                            webcamPlaybackUrl={webcamPlaybackUrl}
+                            isMinimized={isMinimized}
+                            setIsMinimized={setIsMinimized}
+                        />
+                    </Rnd>
+                </div>
             )}
+
         </div>
     );
 }

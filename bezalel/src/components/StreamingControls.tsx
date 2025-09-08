@@ -1,20 +1,21 @@
-"use client";
 
-import React, { Dispatch, SetStateAction, useCallback } from "react";
-import { Sparkles, Radio, Square, ToggleLeft, ToggleRight } from "lucide-react";
+import { Video, X } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface StreamingControlsProps {
     webcamPrompt: string;
-    setWebcamPrompt: Dispatch<SetStateAction<string>>;
+    setWebcamPrompt: (value: string) => void;
     isStreaming: boolean;
     setIsStreaming: (value: boolean) => void;
     useWebcam: boolean;
     setUseWebcam: (value: boolean) => void;
     enhanceWebcam: boolean;
-    setEnhanceWebcam: Dispatch<SetStateAction<boolean>>;
+    setEnhanceWebcam: (value: boolean) => void;
+    onEnhanceWebcam: () => void;
 }
 
-function StreamingControls({
+export default function StreamingControls({
     webcamPrompt,
     setWebcamPrompt,
     isStreaming,
@@ -23,90 +24,66 @@ function StreamingControls({
     setUseWebcam,
     enhanceWebcam,
     setEnhanceWebcam,
+    onEnhanceWebcam,
 }: StreamingControlsProps) {
-    const toggleEnhanceWebcam = useCallback(() => {
-        if (useWebcam) setEnhanceWebcam((prev) => !prev);
-    }, [useWebcam, setEnhanceWebcam]);
-
-    const toggleWebcam = useCallback(() => {
-        setUseWebcam((prev) => !prev);
-    }, [setUseWebcam]);
-
-    const toggleStreaming = useCallback(() => {
-        setIsStreaming((prev) => !prev);
-    }, [setIsStreaming]);
+    const [isPromptFocused, setIsPromptFocused] = useState(false);
 
     return (
-        <>
-            {/* Webcam Prompt */}
-            <input
-                title="Webcam enhancement prompt"
-                placeholder="Webcam prompt..."
-                value={webcamPrompt}
-                onChange={(e) => setWebcamPrompt(e.target.value)}
-                className="text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 
-                    bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 
-                    rounded px-2 py-1 w-28 focus:outline-none focus:ring-1 focus:ring-green-400"
-            />
-
-            {/* Enhance Webcam Button */}
+        <div className="flex items-center gap-2">
             <button
-                title="Enhance Webcam"
-                disabled={!useWebcam || !webcamPrompt}
-                onClick={toggleEnhanceWebcam}
-                className={`w-8 h-8 flex items-center justify-center rounded-md transition 
-                    ${enhanceWebcam && useWebcam && webcamPrompt
-                        ? "bg-green-100 dark:bg-green-900"
-                        : useWebcam && webcamPrompt
-                            ? "hover:bg-green-50 dark:hover:bg-green-900"
-                            : "opacity-50 cursor-not-allowed"}`}
-            >
-                <Sparkles className="w-4 h-4 text-green-600" />
-            </button>
-
-            <span className="h-5 w-px bg-gray-200 dark:bg-zinc-700" />
-
-            {/* Webcam Toggle */}
-            <div className="flex items-center gap-2">
-                <button
-                    title="Toggle Webcam"
-                    onClick={toggleWebcam}
-                    className={`w-8 h-8 flex items-center justify-center rounded-md transition 
-                        ${useWebcam
-                            ? "bg-blue-100 dark:bg-blue-900"
-                            : "hover:bg-gray-100 dark:hover:bg-zinc-800"}`}
-                >
-                    {useWebcam ? (
-                        <ToggleRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    ) : (
-                        <ToggleLeft className="w-4 h-4 text-gray-400 dark:text-zinc-500" />
-                    )}
-                </button>
-                <span className="text-xs text-gray-700 dark:text-gray-200">Webcam</span>
-            </div>
-
-            <span className="h-5 w-px bg-gray-200 dark:bg-zinc-700" />
-
-            {/* Streaming Toggle */}
-            <button
-                onClick={toggleStreaming}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition 
-                    ${isStreaming
-                        ? "bg-red-600 text-white hover:bg-red-700"
-                        : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                title={isStreaming ? "End Stream" : "Go Live"}
+                onClick={() => setIsStreaming(!isStreaming)}
+                className={`w-8 h-8 flex items-center justify-center rounded-md transition ${isStreaming ? "bg-red-100 hover:bg-red-200" : "bg-green-100 hover:bg-green-200"
+                    }`}
             >
                 {isStreaming ? (
-                    <>
-                        <Square className="w-3.5 h-3.5" /> Stop
-                    </>
+                    <X className="w-4 h-4 text-red-600" />
                 ) : (
-                    <>
-                        <Radio className="w-3.5 h-3.5 animate-pulse text-red-300" /> Live
-                    </>
+                    <Video className="w-4 h-4 text-green-600" />
                 )}
             </button>
-        </>
+            <button
+                title="Toggle Webcam"
+                onClick={() => setUseWebcam(!useWebcam)}
+                className={`w-8 h-8 flex items-center justify-center rounded-md transition ${useWebcam ? "bg-green-100 hover:bg-green-200" : "bg-gray-100 hover:bg-gray-200"
+                    }`}
+            >
+                <Video className={`w-4 h-4 ${useWebcam ? "text-green-600" : "text-gray-600"}`} />
+            </button>
+            {useWebcam && (
+                <>
+                    <input
+                        title="Webcam enhancement prompt"
+                        placeholder="Webcam prompt..."
+                        value={webcamPrompt}
+                        onChange={(e) => setWebcamPrompt(e.target.value)}
+                        onFocus={() => setIsPromptFocused(true)}
+                        onBlur={() => setIsPromptFocused(false)}
+                        className="text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 
+                                   bg-gray-50 dark:bg-zinc-800 border border-gray-200 
+                                   dark:border-zinc-700 rounded px-2 py-1 w-40 
+                                   focus:outline-none focus:ring-1 focus:ring-green-400"
+                    />
+                    <button
+                        title="Enhance Webcam"
+                        disabled={!webcamPrompt || isPromptFocused}
+                        onClick={onEnhanceWebcam}
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition 
+                            ${webcamPrompt && !isPromptFocused ? "hover:bg-green-50 cursor-pointer bg-green-100" : "opacity-50 cursor-not-allowed"}`}
+                    >
+                        <Video className="w-4 h-4 text-green-600" />
+                    </button>
+                    <button
+                        title="Toggle Enhanced Webcam"
+                        disabled={!webcamPrompt}
+                        onClick={() => setEnhanceWebcam(!enhanceWebcam)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition 
+                            ${webcamPrompt ? "hover:bg-green-50 cursor-pointer bg-green-100" : "opacity-50 cursor-not-allowed"}`}
+                    >
+                        <Video className="w-4 h-4 text-green-600" />
+                    </button>
+                </>
+            )}
+        </div>
     );
 }
-
-export default React.memo(StreamingControls);
